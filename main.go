@@ -35,17 +35,14 @@ type FileInfo struct {
 }
 
 func NewFileServer() (*FileServer, error) {
-	// 创建 data 目录
 	if err := os.MkdirAll("data", 0755); err != nil {
 		return nil, err
 	}
 
-	// 创建上传文件目录
 	if err := os.MkdirAll("data/uploads", 0755); err != nil {
 		return nil, err
 	}
 
-	// 使用 data 目录下的 files.db
 	db, err := sql.Open("sqlite3", "data/files.db")
 	if err != nil {
 		return nil, err
@@ -70,7 +67,7 @@ func NewFileServer() (*FileServer, error) {
 
 	return &FileServer{
 		db:        db,
-		uploadDir: "data/uploads", // 修改上传目录路径
+		uploadDir: "data/uploads",
 	}, nil
 }
 
@@ -90,14 +87,7 @@ func generateRandomPath() string {
 
 func isTextPreferred(r *http.Request) bool {
 	userAgent := r.Header.Get("User-Agent")
-	// 检查是否是命令行工具
-	if strings.HasPrefix(userAgent, "curl/") ||
-		strings.HasPrefix(userAgent, "Wget/") {
-		return true
-	}
-
-	// 其他客户端返回 false，使用 HTML 界面
-	return false
+	return strings.HasPrefix(userAgent, "curl/") || strings.HasPrefix(userAgent, "Wget/")
 }
 
 func (s *FileServer) handleUpload(w http.ResponseWriter, r *http.Request) {
@@ -106,10 +96,8 @@ func (s *FileServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 获取文件名
 	filename := filepath.Base(r.URL.Path)
 	if filename == "/" || filename == "." {
-		// 从 Content-Disposition 头获取原始文件名
 		_, params, err := mime.ParseMediaType(r.Header.Get("Content-Disposition"))
 		if err == nil && params["filename"] != "" {
 			filename = params["filename"]
@@ -119,7 +107,6 @@ func (s *FileServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 生成唯一的4位路径
 	var path string
 	for {
 		path = generateRandomPath()
@@ -135,7 +122,6 @@ func (s *FileServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 创建目录
 	dirPath := filepath.Join(s.uploadDir, path)
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -149,7 +135,6 @@ func (s *FileServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// 使用路径和文件名组合作为存储路径
 	filePath := filepath.Join(dirPath, filename)
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -214,16 +199,18 @@ curl -X DELETE "http://%s/delete/%s/%s?code=%s"
 		)
 	} else {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message":    "Upload success",
+		response := map[string]interface{}{
+			"path":       path,
 			"filename":   filename,
-			"url":        fmt.Sprintf("http://%s/%s/%s", r.Host, path, filename),
 			"deleteCode": deleteCode,
 			"size":       written,
 			"mimeType":   mimeType,
-		})
+			"uploadTime": time.Now().Format("2006-01-02 15:04:05"),
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 }
+
 func (s *FileServer) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -331,7 +318,6 @@ func (s *FileServer) handleDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error deleting file", http.StatusInternalServerError)
 		return
 	}
-	// 尝试删除空目录
 	os.Remove(filepath.Join(s.uploadDir, path))
 
 	if err = tx.Commit(); err != nil {
@@ -347,6 +333,7 @@ func (s *FileServer) handleDelete(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "File deleted successfully"})
 	}
 }
+
 func (s *FileServer) handleFiles(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`
         SELECT id, path, filename, upload_time, file_size, mime_type, download_count

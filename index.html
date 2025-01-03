@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tar.tn - 简单文件分享</title>
+    <title>文件分享</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
     <style>
         :root {
@@ -216,7 +216,7 @@
 <body>
 <div class="container">
     <header class="site-header">
-        <h1 class="site-title">Tar.tn</h1>
+        <h1 class="site-title">文件分享</h1>
         <p class="site-description">简单文件分享</p>
     </header>
 
@@ -286,14 +286,12 @@
         }
     });
 
-    // 文件选择处理
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             handleFile(e.target.files[0]);
         }
     });
 
-    // 文件处理函数
     async function handleFile(file) {
         try {
             await uploadFile(file);
@@ -302,8 +300,6 @@
             statusText.textContent = '上传失败: ' + error.message;
         }
     }
-
-    // 文件上传函数
     async function uploadFile(file) {
         uploadProgress.style.display = 'block';
         uploadResult.style.display = 'none';
@@ -325,34 +321,30 @@
 
             const result = await response.json();
 
-            // 保存删除码到本地存储
-            if (result.deleteCode) {
-                localStorage.setItem(`deleteCode_/${result.path}/${result.filename}`, result.deleteCode);
+            const path = result.path;
+            const filename = result.filename;
+            const deleteCode = result.deleteCode;
+
+            if (deleteCode) {
+                localStorage.setItem(`deleteCode_/${path}/${filename}`, deleteCode);
             }
 
-            // 显示上传结果
-            showUploadResult(result);
+            uploadResult.style.display = 'block';
+            const fileUrl = `${baseUrl}/${path}/${filename}`;
+            resultContent.innerHTML = `
+            <p>文件链接: <a href="${fileUrl}" target="_blank">${fileUrl}</a></p>
+            <p>删除码: ${deleteCode}</p>
+        `;
 
-            // 刷新文件列表
             loadFileList();
         } catch (error) {
+            console.error('Upload failed:', error);
             throw error;
+        } finally {
+            uploadProgress.style.display = 'none';
         }
     }
 
-    // 显示上传结果
-    function showUploadResult(result) {
-        uploadProgress.style.display = 'none';
-        uploadResult.style.display = 'block';
-
-        const fileUrl = `${baseUrl}/${result.path}/${result.filename}`;
-        resultContent.innerHTML = `
-                <p>文件链接: <a href="${fileUrl}" target="_blank">${fileUrl}</a></p>
-                <p>删除码: ${result.deleteCode}</p>
-            `;
-    }
-
-    // 复制结果信息
     function copyResult() {
         const content = resultContent.innerText;
         navigator.clipboard.writeText(content)
@@ -360,7 +352,6 @@
             .catch(err => console.error('复制失败:', err));
     }
 
-    // 加载文件列表
     async function loadFileList() {
         try {
             const response = await fetch('/files');
@@ -378,7 +369,6 @@
         }
     }
 
-    // 创建文件列表项
     function createFileListItem(file) {
         const div = document.createElement('div');
         div.className = 'file-item';
@@ -387,24 +377,23 @@
         const uploadDate = new Date(file.uploadTime).toLocaleString();
 
         div.innerHTML = `
-                <div class="file-info">
-                    <div class="file-name">${file.filename}</div>
-                    <div class="file-meta">
-                        <span class="file-size">${formatFileSize(file.fileSize)}</span> ·
-                        <span class="upload-time">${uploadDate}</span> ·
-                        <span class="download-count">下载次数: ${file.downloadCount}</span>
-                    </div>
-                </div>
-                <div class="file-actions">
-                    <a href="/${file.path}/${file.filename}" class="button" download>下载</a>
-                    ${deleteCode ? `<button class="button delete-button" onclick="deleteFile('${file.path}', '${file.filename}', '${deleteCode}')">删除</button>` : ''}
-                </div>
-            `;
+        <div class="file-info">
+            <div class="file-name">${file.filename}</div>
+            <div class="file-meta">
+                <span class="file-size">${formatFileSize(file.fileSize)}</span> ·
+                <span class="upload-time">${uploadDate}</span> ·
+                <span class="download-count">下载次数: ${file.downloadCount}</span>
+            </div>
+        </div>
+        <div class="file-actions">
+            <a href="/${file.path}/${file.filename}" class="button" download>下载</a>
+            ${deleteCode ? `<button class="button delete-button" onclick="deleteFile('${file.path}', '${file.filename}', '${deleteCode}')">删除</button>` : ''}
+        </div>
+    `;
 
         return div;
     }
 
-    // 删除文件
     async function deleteFile(path, filename, deleteCode) {
         if (!confirm('确定要删除这个文件吗？')) {
             return;
@@ -427,7 +416,6 @@
         }
     }
 
-    // 格式化文件大小
     function formatFileSize(bytes) {
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         if (bytes === 0) return '0 B';
@@ -435,22 +423,9 @@
         return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    // 移动设备支持
-    if ('ontouchstart' in window) {
-        dropZone.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            document.getElementById('fileInput').click();
-        });
-    }
-
-    <!-- 前面的代码保持不变，继续添加最后的 JavaScript 部分 -->
-
-    // 页面加载完成后执行
     document.addEventListener('DOMContentLoaded', () => {
-        // 初始加载文件列表
         loadFileList();
 
-        // 设置上传进度监听
         const originalXHR = window.XMLHttpRequest;
         window.XMLHttpRequest = function () {
             const xhr = new originalXHR();
@@ -478,12 +453,20 @@
 
     // 添加网络状态监听
     window.addEventListener('online', () => {
-        loadFileList(); // 网络恢复时重新加载文件列表
+        loadFileList();
     });
 
     window.addEventListener('offline', () => {
         alert('网络连接已断开，部分功能可能无法使用');
     });
+
+    // 移动设备支持
+    if ('ontouchstart' in window) {
+        dropZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            document.getElementById('fileInput').click();
+        });
+    }
 </script>
 </body>
 </html>
