@@ -54,7 +54,7 @@ go build
 
 上传文件:
 ```bash
-curl -T 文件名 http://localhost:8080/
+curl -T 文件名 localhost:8080
 ```
 
 下载文件:

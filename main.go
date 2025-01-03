@@ -386,15 +386,15 @@ func (s *FileServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `文件服务器使用说明:
 
 上传文件:
-  curl -T 文件名 http://%s/
-  curl -T 文件名 http://%s/新文件名
+  curl -T 文件名 %s
+  curl -T 文件名 %s/新文件名
 
 下载文件:
-  curl -O http://%s/xxxx/文件名
-  wget http://%s/xxxx/文件名
+  curl -O %s/xxxx/文件名
+  wget %s/xxxx/文件名
 
 查看文件列表:
-  curl http://%s/files
+  curl %s/files
 
 删除文件:
   curl -X DELETE "http://%s/delete/xxxx/文件名?code=删除码"
