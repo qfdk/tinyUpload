@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tar.tn - 简单上传, Simple Is Beautiful</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
     <style>
         :root {
             --primary-color: #2196F3;
@@ -28,7 +29,7 @@
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .site-header {
@@ -244,7 +245,8 @@
         <h3>命令行快捷操作</h3>
         <p>上传文件：<code id="uploadCommand">curl -T 文件名 https://example.com/</code></p>
         <p>下载文件：<code id="downloadCommand">curl -O https://example.com/xxxx/文件名</code></p>
-        <p>删除文件：<code id="deleteCommand">curl -X DELETE "https://example.com/delete/xxxx/文件名?code=删除码"</code></p>
+        <p>删除文件：<code id="deleteCommand">curl -X DELETE "https://example.com/delete/xxxx/文件名?code=删除码"</code>
+        </p>
     </div>
 
     <div class="file-list" id="fileList">
@@ -300,6 +302,7 @@
             statusText.textContent = '上传失败: ' + error.message;
         }
     }
+
     async function uploadFile(file) {
         uploadProgress.style.display = 'block';
         uploadResult.style.display = 'none';
@@ -354,15 +357,15 @@
 
     async function loadFileList() {
         try {
-            const response = await fetch('/files');
-            const files = await response.json();
+            // const response = await fetch('/files');
+            // const files = await response.json();
             const fileList = document.getElementById('fileList');
             fileList.innerHTML = '';
-            
-            files?.forEach(file => {
-                const fileItem = createFileListItem(file);
-                fileList.appendChild(fileItem);
-            });
+
+            // files?.forEach(file => {
+            //     const fileItem = createFileListItem(file);
+            //     fileList.appendChild(fileItem);
+            // });
         } catch (error) {
             console.error('获取文件列表失败:', error);
         }
@@ -393,27 +396,27 @@
         return div;
     }
 
-    async function deleteFile(path, filename, deleteCode) {
-        if (!confirm('确定要删除这个文件吗？')) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/delete/${path}/${filename}?code=${deleteCode}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                localStorage.removeItem(`deleteCode_/${path}/${filename}`);
-                loadFileList();
-            } else {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-        } catch (error) {
-            console.error('删除失败:', error);
-            alert('删除失败: ' + error.message);
-        }
-    }
+    // async function deleteFile(path, filename, deleteCode) {
+    //     if (!confirm('确定要删除这个文件吗？')) {
+    //         return;
+    //     }
+    //
+    //     try {
+    //         const response = await fetch(`/delete/${path}/${filename}?code=${deleteCode}`, {
+    //             method: 'DELETE'
+    //         });
+    //
+    //         if (response.ok) {
+    //             localStorage.removeItem(`deleteCode_/${path}/${filename}`);
+    //             loadFileList();
+    //         } else {
+    //             throw new Error(`HTTP error! status: ${response.status}`);
+    //         }
+    //     } catch (error) {
+    //         console.error('删除失败:', error);
+    //         alert('删除失败: ' + error.message);
+    //     }
+    // }
 
     function formatFileSize(bytes) {
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];

@@ -490,9 +490,6 @@ func (s *FileServer) handleRoot(w http.ResponseWriter, r *http.Request) {
   curl -O %s/xxxx/文件名
   wget %s/xxxx/文件名
 
-查看文件列表:
-  curl %s/files
-
 删除文件:
   curl -X DELETE "http://%s/delete/xxxx/文件名?code=删除码"
 
@@ -523,7 +520,7 @@ func main() {
 	http.HandleFunc("/", gzipMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			http.ServeFile(w, r, "index.html")
+			http.ServeFile(w, r, "static/index.html")
 			return
 		}
 
@@ -535,7 +532,7 @@ func main() {
 		}
 	}))
 
-	http.HandleFunc("/files", gzipMiddleware(server.handleFiles))
+	//http.HandleFunc("/files", gzipMiddleware(server.handleFiles))
 	http.HandleFunc("/delete/", gzipMiddleware(server.handleDelete))
 
 	addr := ":8080"
