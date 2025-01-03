@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tar.tn - 简单文件分享</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --primary-dark: #1976D2;
+            --danger-color: #dc3545;
+            --danger-dark: #c82333;
+            --success-color: #4caf50;
+            --success-dark: #388e3c;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .site-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .site-title {
+            font-size: 2.5em;
+            margin: 0;
+            color: var(--primary-color);
+        }
+
+        .site-description {
+            color: #666;
+            margin-top: 10px;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary-color);
+            background-color: #E3F2FD;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .button:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .delete-button {
+            background-color: var(--danger-color);
+        }
+
+        .delete-button:hover {
+            background-color: var(--danger-dark);
+        }
+
+        .copy-button {
+            background-color: var(--success-color);
+        }
+
+        .copy-button:hover {
+            background-color: var(--success-dark);
+        }
+
+        #uploadProgress {
+            margin-top: 15px;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .status-text {
+            color: #666;
+            font-size: 14px;
+        }
+
+        #uploadResult {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .shortcuts {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .shortcuts code {
+            background-color: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        .file-list {
+            margin-top: 20px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-info {
+            flex-grow: 1;
+        }
+
+        .file-name {
+            font-weight: 500;
+        }
+
+        .file-meta {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 4px;
+        }
+
+        .file-meta span {
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .download-count {
+            color: var(--primary-color);
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .file-actions {
+                margin-top: 10px;
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .file-meta span {
+                display: block;
+                margin-bottom: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="site-header">
+        <h1 class="site-title">Tar.tn</h1>
+        <p class="site-description">简单文件分享</p>
+    </header>
+
+    <div class="upload-area" id="dropZone">
+        <div class="upload-icon">📦</div>
+        <p>拖拽文件到此处或点击选择文件</p>
+        <input type="file" id="fileInput" style="display: none">
+        <button class="button" onclick="document.getElementById('fileInput').click()">选择文件</button>
+
+        <div id="uploadProgress">
+            <div class="progress-bar">
+                <div class="progress-bar-fill" style="width: 0%"></div>
+            </div>
+            <div class="status-text"></div>
+        </div>
+
+        <div id="uploadResult">
+            <h3>上传成功！</h3>
+            <div id="resultContent"></div>
+            <button class="button copy-button" onclick="copyResult()">复制信息</button>
+        </div>
+    </div>
+
+    <div class="shortcuts">
+        <h3>命令行快捷操作</h3>
+        <p>上传文件：<code id="uploadCommand">curl -T 文件名 https://example.com/</code></p>
+        <p>下载文件：<code id="downloadCommand">curl -O https://example.com/xxxx/文件名</code></p>
+        <p>删除文件：<code id="deleteCommand">curl -X DELETE "https://example.com/delete/xxxx/文件名?code=删除码"</code></p>
+    </div>
+
+    <div class="file-list" id="fileList">
+        <!-- 文件列表将通过 JavaScript 动态填充 -->
+    </div>
+</div>
+
+<script>
+    const baseUrl = window.location.origin;
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const progressBar = document.querySelector('.progress-bar-fill');
+    const statusText = document.querySelector('.status-text');
+    const uploadResult = document.getElementById('uploadResult');
+    const resultContent = document.getElementById('resultContent');
+
+    // 更新命令行示例
+    document.getElementById('uploadCommand').textContent = `curl -T 文件名 ${baseUrl}/`;
+    document.getElementById('downloadCommand').textContent = `curl -O ${baseUrl}/xxxx/文件名`;
+    document.getElementById('deleteCommand').textContent = `curl -X DELETE "${baseUrl}/delete/xxxx/文件名?code=删除码"`;
+
+    // 拖放处理
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    });
+
+    // 文件选择处理
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFile(e.target.files[0]);
+        }
+    });
+
+    // 文件处理函数
+    async function handleFile(file) {
+        try {
+            await uploadFile(file);
+        } catch (error) {
+            console.error('上传失败:', error);
+            statusText.textContent = '上传失败: ' + error.message;
+        }
+    }
+
+    // 文件上传函数
+    async function uploadFile(file) {
+        uploadProgress.style.display = 'block';
+        uploadResult.style.display = 'none';
+        statusText.textContent = '准备上传...';
+        progressBar.style.width = '0%';
+
+        try {
+            const response = await fetch(`/${file.name}`, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            // 保存删除码到本地存储
+            if (result.deleteCode) {
+                localStorage.setItem(`deleteCode_/${result.path}/${result.filename}`, result.deleteCode);
+            }
+
+            // 显示上传结果
+            showUploadResult(result);
+
+            // 刷新文件列表
+            loadFileList();
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    // 显示上传结果
+    function showUploadResult(result) {
+        uploadProgress.style.display = 'none';
+        uploadResult.style.display = 'block';
+
+        const fileUrl = `${baseUrl}/${result.path}/${result.filename}`;
+        resultContent.innerHTML = `
+                <p>文件链接: <a href="${fileUrl}" target="_blank">${fileUrl}</a></p>
+                <p>删除码: ${result.deleteCode}</p>
+            `;
+    }
+
+    // 复制结果信息
+    function copyResult() {
+        const content = resultContent.innerText;
+        navigator.clipboard.writeText(content)
+            .then(() => alert('复制成功！'))
+            .catch(err => console.error('复制失败:', err));
+    }
+
+    // 加载文件列表
+    async function loadFileList() {
+        try {
+            const response = await fetch('/files');
+            const files = await response.json();
+
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+
+            files.forEach(file => {
+                const fileItem = createFileListItem(file);
+                fileList.appendChild(fileItem);
+            });
+        } catch (error) {
+            console.error('获取文件列表失败:', error);
+        }
+    }
+
+    // 创建文件列表项
+    function createFileListItem(file) {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+
+        const deleteCode = localStorage.getItem(`deleteCode_/${file.path}/${file.filename}`);
+        const uploadDate = new Date(file.uploadTime).toLocaleString();
+
+        div.innerHTML = `
+                <div class="file-info">
+                    <div class="file-name">${file.filename}</div>
+                    <div class="file-meta">
+                        <span class="file-size">${formatFileSize(file.fileSize)}</span> ·
+                        <span class="upload-time">${uploadDate}</span> ·
+                        <span class="download-count">下载次数: ${file.downloadCount}</span>
+                    </div>
+                </div>
+                <div class="file-actions">
+                    <a href="/${file.path}/${file.filename}" class="button" download>下载</a>
+                    ${deleteCode ? `<button class="button delete-button" onclick="deleteFile('${file.path}', '${file.filename}', '${deleteCode}')">删除</button>` : ''}
+                </div>
+            `;
+
+        return div;
+    }
+
+    // 删除文件
+    async function deleteFile(path, filename, deleteCode) {
+        if (!confirm('确定要删除这个文件吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/delete/${path}/${filename}?code=${deleteCode}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                localStorage.removeItem(`deleteCode_/${path}/${filename}`);
+                loadFileList();
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('删除失败:', error);
+            alert('删除失败: ' + error.message);
+        }
+    }
+
+    // 格式化文件大小
+    function formatFileSize(bytes) {
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        if (bytes === 0) return '0 B';
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // 移动设备支持
+    if ('ontouchstart' in window) {
+        dropZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            document.getElementById('fileInput').click();
+        });
+    }
+
+    <!-- 前面的代码保持不变，继续添加最后的 JavaScript 部分 -->
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', () => {
+        // 初始加载文件列表
+        loadFileList();
+
+        // 设置上传进度监听
+        const originalXHR = window.XMLHttpRequest;
+        window.XMLHttpRequest = function () {
+            const xhr = new originalXHR();
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressBar.style.width = percentComplete + '%';
+                    statusText.textContent = `已上传 ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
+                }
+            });
+            return xhr;
+        };
+    });
+
+    // 错误处理函数
+    function handleError(error) {
+        console.error('发生错误:', error);
+        alert('操作失败: ' + error.message);
+    }
+
+    // 添加全局错误处理
+    window.addEventListener('error', (event) => {
+        console.error('全局错误:', event.error);
+    });
+
+    // 添加网络状态监听
+    window.addEventListener('online', () => {
+        loadFileList(); // 网络恢复时重新加载文件列表
+    });
+
+    window.addEventListener('offline', () => {
+        alert('网络连接已断开，部分功能可能无法使用');
+    });
+</script>
+</body>
+</html>
