@@ -406,11 +406,83 @@ func (s *FileServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/*
+*
+自动删除超过1天
+*/
+func (s *FileServer) cleanupExpiredFiles() error {
+	// 获取3天前的文件
+	query := `
+        SELECT path, filename 
+        FROM files 
+        WHERE upload_time < datetime('now', '-1 days')
+    `
+
+	// 开始事务
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始事务失败: %v", err)
+	}
+	defer tx.Rollback()
+
+	// 查询需要删除的文件
+	rows, err := tx.Query(query)
+	if err != nil {
+		return fmt.Errorf("查询过期文件失败: %v", err)
+	}
+	defer rows.Close()
+
+	// 删除物理文件
+	for rows.Next() {
+		var path, filename string
+		if err := rows.Scan(&path, &filename); err != nil {
+			log.Printf("读取文件记录失败: %v", err)
+			continue
+		}
+
+		// 删除文件
+		filePath := filepath.Join(s.uploadDir, path, filename)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			log.Printf("删除文件失败 %s: %v", filePath, err)
+		}
+
+		// 尝试删除目录
+		dirPath := filepath.Join(s.uploadDir, path)
+		os.Remove(dirPath) // 忽略错误，如果目录不为空会失败
+	}
+
+	// 删除数据库中的记录
+	_, err = tx.Exec(`
+        DELETE FROM files 
+        WHERE upload_time < datetime('now', '-3 days')
+    `)
+	if err != nil {
+		return fmt.Errorf("删除数据库记录失败: %v", err)
+	}
+
+	// 提交事务
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("提交事务失败: %v", err)
+	}
+
+	return nil
+}
+
 func main() {
 	server, err := NewFileServer()
 	if err != nil {
 		log.Fatal(err)
 	}
+	// 定期清理文件
+	go func() {
+		for {
+			if err := server.cleanupExpiredFiles(); err != nil {
+				log.Printf("清理过期文件失败: %v", err)
+			}
+			// 每小时执行一次
+			time.Sleep(1 * time.Hour)
+		}
+	}()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
