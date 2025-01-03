@@ -15,12 +15,15 @@ fi
 echo "Building Docker image..."
 docker build -t tiny-upload .
 
+# 建立运行目录
+mkdir -p /data/tinyUpload
+
 # 运行新容器
 echo "Starting container on port 3080..."
 docker run -d \
     --name tiny-upload \
     -p 3080:8080 \
-    -v $(pwd)/data:/app/data \
+    -v /data/tinyUpload:/app/data \
     tiny-upload
 
 echo "Container is running on http://localhost:3080"
