@@ -26,4 +26,4 @@ docker run -d \
 echo "Container is running on http://localhost:3080"
 
 # 显示容器日志
-docker logs -f tiny-upload
+#docker logs -f tiny-upload
