@@ -17,7 +17,7 @@ RUN adduser -D -u 1000 appuser && \
 
 # 复制二进制文件和前端文件
 COPY --from=builder /app/tinyUpload /app/
-COPY --from=builder /app/index.html /app/
+COPY --from=builder /app/static /app/
 
 USER appuser
 WORKDIR /app
