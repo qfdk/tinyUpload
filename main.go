@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -17,6 +18,102 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func shouldCompress(contentType string) bool {
+	switch {
+	case strings.Contains(contentType, "text/"):
+		return true
+	case strings.Contains(contentType, "application/json"):
+		return true
+	case strings.Contains(contentType, "application/javascript"):
+		return true
+	case strings.Contains(contentType, "application/x-javascript"):
+		return true
+	default:
+		return false
+	}
+}
+
+func gzipMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 跳过文件上传请求
+		if r.Method == http.MethodPut {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// 检查客户端是否支持 gzip
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// 继续处理请求
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+
+		next.ServeHTTP(gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	}
+}
+
+func (s *FileServer) cleanupExpiredFiles() error {
+	// 获取3天前的文件
+	query := `
+        SELECT path, filename 
+        FROM files 
+        WHERE upload_time < datetime('now', '-1 days')
+    `
+
+	// 开始事务
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 查询需要删除的文件
+	rows, err := tx.Query(query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// 删除物理文件
+	for rows.Next() {
+		var path, filename string
+		if err := rows.Scan(&path, &filename); err != nil {
+			log.Printf("读取文件记录失败: %v", err)
+			continue
+		}
+
+		filePath := filepath.Join(s.uploadDir, path, filename)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			log.Printf("删除文件失败 %s: %v", filePath, err)
+		}
+
+		dirPath := filepath.Join(s.uploadDir, path)
+		os.Remove(dirPath) // 忽略错误，如果目录不为空会失败
+	}
+
+	// 删除数据库中的记录
+	_, err = tx.Exec(`DELETE FROM files WHERE upload_time < datetime('now', '-3 days')`)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
 
 type FileServer struct {
 	db        *sql.DB
@@ -402,70 +499,8 @@ func (s *FileServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 服务器时间: %s
 `, r.Host, r.Host, r.Host, r.Host, r.Host, r.Host, time.Now().Format("2006-01-02 15:04:05"))
 	} else {
-		http.ServeFile(w, r, "index.html")
+		http.ServeFile(w, r, "static/index.html")
 	}
-}
-
-/*
-*
-自动删除超过1天
-*/
-func (s *FileServer) cleanupExpiredFiles() error {
-	// 获取3天前的文件
-	query := `
-        SELECT path, filename 
-        FROM files 
-        WHERE upload_time < datetime('now', '-1 days')
-    `
-
-	// 开始事务
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("开始事务失败: %v", err)
-	}
-	defer tx.Rollback()
-
-	// 查询需要删除的文件
-	rows, err := tx.Query(query)
-	if err != nil {
-		return fmt.Errorf("查询过期文件失败: %v", err)
-	}
-	defer rows.Close()
-
-	// 删除物理文件
-	for rows.Next() {
-		var path, filename string
-		if err := rows.Scan(&path, &filename); err != nil {
-			log.Printf("读取文件记录失败: %v", err)
-			continue
-		}
-
-		// 删除文件
-		filePath := filepath.Join(s.uploadDir, path, filename)
-		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-			log.Printf("删除文件失败 %s: %v", filePath, err)
-		}
-
-		// 尝试删除目录
-		dirPath := filepath.Join(s.uploadDir, path)
-		os.Remove(dirPath) // 忽略错误，如果目录不为空会失败
-	}
-
-	// 删除数据库中的记录
-	_, err = tx.Exec(`
-        DELETE FROM files 
-        WHERE upload_time < datetime('now', '-3 days')
-    `)
-	if err != nil {
-		return fmt.Errorf("删除数据库记录失败: %v", err)
-	}
-
-	// 提交事务
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("提交事务失败: %v", err)
-	}
-
-	return nil
 }
 
 func main() {
@@ -473,28 +508,35 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 定期清理文件
+
+	// 启动定期清理任务
 	go func() {
 		for {
 			if err := server.cleanupExpiredFiles(); err != nil {
 				log.Printf("清理过期文件失败: %v", err)
 			}
-			// 每小时执行一次
 			time.Sleep(1 * time.Hour)
 		}
 	}()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// 设置路由处理
+	http.HandleFunc("/", gzipMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			http.ServeFile(w, r, "index.html")
+			return
+		}
+
 		switch r.Method {
 		case http.MethodPut:
 			server.handleUpload(w, r)
 		default:
-			server.handleRoot(w, r)
+			server.handleDownload(w, r)
 		}
-	})
+	}))
 
-	http.HandleFunc("/files", server.handleFiles)
-	http.HandleFunc("/delete/", server.handleDelete)
+	http.HandleFunc("/files", gzipMiddleware(server.handleFiles))
+	http.HandleFunc("/delete/", gzipMiddleware(server.handleDelete))
 
 	addr := ":8080"
 	log.Printf("Starting server on %s", addr)

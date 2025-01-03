@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文件分享</title>
+    <title>Tar.tn - 简单上传, Simple Is Beautiful</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
     <style>
         :root {
@@ -216,8 +216,8 @@
 <body>
 <div class="container">
     <header class="site-header">
-        <h1 class="site-title">文件分享</h1>
-        <p class="site-description">简单文件分享</p>
+        <h1 class="site-title">Tar.tn</h1>
+        <p class="site-description">简单上传, Simple Is Beautiful</p>
     </header>
 
     <div class="upload-area" id="dropZone">
@@ -356,11 +356,10 @@
         try {
             const response = await fetch('/files');
             const files = await response.json();
-
             const fileList = document.getElementById('fileList');
             fileList.innerHTML = '';
-
-            files.forEach(file => {
+            
+            files?.forEach(file => {
                 const fileItem = createFileListItem(file);
                 fileList.appendChild(fileItem);
             });
