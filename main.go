@@ -28,21 +28,6 @@ func (w gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func shouldCompress(contentType string) bool {
-	switch {
-	case strings.Contains(contentType, "text/"):
-		return true
-	case strings.Contains(contentType, "application/json"):
-		return true
-	case strings.Contains(contentType, "application/javascript"):
-		return true
-	case strings.Contains(contentType, "application/x-javascript"):
-		return true
-	default:
-		return false
-	}
-}
-
 func gzipMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 跳过文件上传请求
@@ -483,18 +468,17 @@ func (s *FileServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `文件服务器使用说明:
 
 上传文件:
-  curl -T 文件名 %s
-  curl -T 文件名 %s/新文件名
+  curl -T 文件名 %[1]s
+  curl -T 文件名 %[1]s/新文件名
 
 下载文件:
-  curl -O %s/xxxx/文件名
-  wget %s/xxxx/文件名
+  curl -O %[1]s/xxxx/文件名
+  wget %[1]s/xxxx/文件名
 
 删除文件:
-  curl -X DELETE "http://%s/delete/xxxx/文件名?code=删除码"
+  curl -X DELETE "http://%[1]s/delete/xxxx/文件名?code=删除码"
 
-服务器时间: %s
-`, r.Host, r.Host, r.Host, r.Host, r.Host, r.Host, time.Now().Format("2006-01-02 15:04:05"))
+服务器时间: %[2]s`, r.Host, time.Now().Format("2006-01-02 15:04:05"))
 	} else {
 		http.ServeFile(w, r, "static/index.html")
 	}
@@ -518,17 +502,11 @@ func main() {
 
 	// 设置路由处理
 	http.HandleFunc("/", gzipMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			http.ServeFile(w, r, "static/index.html")
-			return
-		}
-
 		switch r.Method {
 		case http.MethodPut:
 			server.handleUpload(w, r)
 		default:
-			server.handleDownload(w, r)
+			server.handleRoot(w, r)
 		}
 	}))
 
