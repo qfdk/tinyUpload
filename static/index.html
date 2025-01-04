@@ -60,9 +60,9 @@
     const fileList = document.getElementById('fileList');
 
     // 更新命令行示例
-    document.getElementById('uploadCommand').textContent = `curl -T 文件名 ${baseUrl}/`;
-    document.getElementById('downloadCommand').textContent = `curl -O ${baseUrl}/xxxx/文件名`;
-    document.getElementById('deleteCommand').textContent = `curl -X DELETE "${baseUrl}/delete/xxxx/文件名?code=删除码"`;
+    document.getElementById('uploadCommand').textContent = `curl -T example.txt ${window.location.host}`;
+    document.getElementById('downloadCommand').textContent = `curl -O ${baseUrl}/xxxx/example.txt`;
+    document.getElementById('deleteCommand').textContent = `curl -X DELETE "${baseUrl}/delete/xxxx/example.txt?code=删除码"`;
 
     // 初始化事件监听
     document.addEventListener('DOMContentLoaded', () => {
