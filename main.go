@@ -532,7 +532,11 @@ func main() {
 		}
 	}))
 
-	//http.HandleFunc("/files", gzipMiddleware(server.handleFiles))
+	http.HandleFunc("/static/style.css", gzipMiddleware(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/css; charset=utf-8")
+		http.ServeFile(writer, request, "static/style.css")
+	}))
+
 	http.HandleFunc("/delete/", gzipMiddleware(server.handleDelete))
 
 	addr := ":8080"
