@@ -12,7 +12,7 @@ docker build -t tiny-upload:new .
 echo "Starting new container for testing..."
 docker run -d \
    --name tiny-upload-new \
-   -p 3081:8080 \
+   -p 3080:8081 \
    -v /data/tinyUpload:/app/data \
    tiny-upload:new
 
