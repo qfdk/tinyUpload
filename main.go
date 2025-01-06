@@ -61,7 +61,7 @@ func NewFileServer() (*FileServer, error) {
 
 	// 初始化 Fiber 应用
 	app := fiber.New(fiber.Config{
-		Prefork:        true,
+		Prefork:        false,
 		ServerHeader:   "FileServer",
 		BodyLimit:      1024 * 1024 * 1024, // 1G
 		ReadTimeout:    30 * time.Second,
