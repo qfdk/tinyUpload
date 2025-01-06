@@ -183,23 +183,23 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 
 	// 检查是否是命令行请求
 	if isTextPreferred(c) {
-		// 返回文本格式
-		return c.Type("text").SendString(fmt.Sprintf(`上传成功！
-文件名: %s
-访问链接: http://%s/%s/%s
-删除码: %s
-大小: %d bytes
-类型: %s
-
-删除命令:
-curl -X DELETE "http://%s/delete/%s/%s?code=%s"
-`,
-			filename,
-			c.Hostname(), path, filename,
-			deleteCode,
-			fileSize, mimeType,
-			c.Hostname(), path, filename, deleteCode,
-		))
+	    // Return text format
+	    return c.Type("text").SendString(fmt.Sprintf(`Upload successful!
+	Filename: %s
+	Access URL: http://%s/%s/%s
+	Delete Code: %s
+	Size: %d bytes
+	Type: %s
+	
+	Delete Command:
+	curl -X DELETE "http://%s/delete/%s/%s?code=%s"
+	`,
+	        filename,
+	        c.Hostname(), path, filename,
+	        deleteCode,
+	        fileSize, mimeType,
+	        c.Hostname(), path, filename, deleteCode,
+	    ))
 	}
 
 	// 返回 JSON 格式
