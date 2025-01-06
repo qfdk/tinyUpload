@@ -85,27 +85,27 @@ func NewFileServer() (*FileServer, error) {
 }
 
 func (s *FileServer) handleRoot(c *fiber.Ctx) error {
-	if isTextPreferred(c) {
-		host := c.Hostname()
-		now := time.Now().Format("2006-01-02 15:04:05")
-		return c.Type("text").SendString(fmt.Sprintf(`文件服务器使用说明:
+    if isTextPreferred(c) {
+        host := c.Hostname()
+        now := time.Now().Format("2006-01-02 15:04:05")
+        return c.Type("text").SendString(fmt.Sprintf(`File Server Usage Instructions:
 
-上传文件:
-  curl -T 文件名 %s
-  curl -T 文件名 %s/新文件名
+Upload File:
+  curl -T filename %s
+  curl -T filename %s/new_filename
 
-下载文件:
-  curl -O %s/xxxx/文件名
-  wget %s/xxxx/文件名
+Download File:
+  curl -O %s/xxxx/filename
+  wget %s/xxxx/filename
 
-删除文件:
-  curl -X DELETE "http://%s/delete/xxxx/文件名?code=删除码"
+Delete File:
+  curl -X DELETE "%s/delete/xxxx/filename?code=delete_code"
 
-服务器时间: %s`, host, host, host, host, host, now))
-	}
+Server Time: %s`, host, host, host, host, host, now))
+    }
 
-	// 如果不是命令行访问，返回静态文件
-	return c.SendFile("static/index.html")
+    // If not accessed from command line, return static file
+    return c.SendFile("static/index.html")
 }
 
 func (s *FileServer) setupRoutes() {
