@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,16 +30,16 @@ type FileServer struct {
 func NewFileServer() (*FileServer, error) {
 	// 创建必要的目录
 	if err := os.MkdirAll("data", 0755); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create data directory: %v", err)
 	}
 	if err := os.MkdirAll("data/uploads", 0755); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create uploads directory: %v", err)
 	}
 
 	// 初始化数据库
 	db, err := sql.Open("sqlite3", "data/files.db")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database: %v", err)
 	}
 
 	// 创建数据表
@@ -47,27 +48,31 @@ func NewFileServer() (*FileServer, error) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path TEXT NOT NULL,
             filename TEXT NOT NULL,
+            encoded_filename TEXT NOT NULL,
             delete_code TEXT NOT NULL,
             upload_time DATETIME NOT NULL,
             file_size INTEGER NOT NULL,
             mime_type TEXT,
             download_count INTEGER DEFAULT 0,
-            UNIQUE(path, filename)
+            UNIQUE(path, encoded_filename)
         )
     `)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create table: %v", err)
 	}
 
 	// 初始化 Fiber 应用
 	app := fiber.New(fiber.Config{
-		Prefork:        false,
-		ServerHeader:   "FileServer",
-		BodyLimit:      1024 * 1024 * 1024, // 1G
-		ReadTimeout:    30 * time.Second,
-		WriteTimeout:   30 * time.Second,
-		IdleTimeout:    60 * time.Second,
-		ReadBufferSize: 4096,
+		Prefork:      false,
+		ServerHeader: "FileServer",
+		BodyLimit:    1024 * 1024 * 1024, // 1G
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+		ErrorHandler: func(c *fiber.Ctx, err error) error {
+			log.Printf("Error handling request: %v", err)
+			return c.Status(500).SendString(fmt.Sprintf("Server error: %v", err))
+		},
 	})
 
 	// 添加中间件
@@ -84,11 +89,22 @@ func NewFileServer() (*FileServer, error) {
 	}, nil
 }
 
+func (s *FileServer) setupRoutes() {
+	s.app.Static("/static", "./static")
+	s.app.Get("/favicon.ico", func(c *fiber.Ctx) error {
+		return c.SendStatus(204)
+	})
+	s.app.Get("/", s.handleRoot)
+	s.app.Put("/:filename", s.handleUpload)
+	s.app.Get("/:path/:filename", s.handleDownload)
+	s.app.Delete("/delete/:path/:filename", s.handleDelete)
+}
+
 func (s *FileServer) handleRoot(c *fiber.Ctx) error {
-    if isTextPreferred(c) {
-        host := c.Hostname()
-        now := time.Now().Format("2006-01-02 15:04:05")
-        return c.Type("text").SendString(fmt.Sprintf(`File Server Usage Instructions:
+	if isTextPreferred(c) {
+		host := c.Hostname()
+		now := time.Now().Format("2006-01-02 15:04:05")
+		return c.Type("text").SendString(fmt.Sprintf(`File Server Usage Instructions:
 
 Upload File:
   curl -T filename %s
@@ -102,110 +118,116 @@ Delete File:
   curl -X DELETE "%s/delete/xxxx/filename?code=delete_code"
 
 Server Time: %s`, host, host, host, host, host, now))
-    }
+	}
 
-    // If not accessed from command line, return static file
-    return c.SendFile("static/index.html")
-}
-
-func (s *FileServer) setupRoutes() {
-	// 静态文件配置
-	s.app.Static("/static", "./static") // 注意这里的路径配置
-
-	// 首页路由
-	s.app.Get("/", s.handleRoot)
-
-	// 文件上传路由 - 直接使用根路径
-	s.app.Put("/:filename", s.handleUpload) // 直接接收文件名
-	s.app.Get("/:path/:filename", s.handleDownload)
-	s.app.Delete("/delete/:path/:filename", s.handleDelete)
+	return c.SendFile("static/index.html")
 }
 
 func (s *FileServer) handleUpload(c *fiber.Ctx) error {
-	// 从路由参数获取文件名
+	// 从路由参数获取文件名并进行URL解码
 	filename := c.Params("filename")
-	if filename == "" {
+	log.Printf("Received upload request for filename: %s", filename)
+
+	decodedFilename, err := url.QueryUnescape(filename)
+	if err != nil {
+		log.Printf("Error decoding filename: %v", err)
+		return fmt.Errorf("invalid filename encoding: %v", err)
+	}
+	log.Printf("Decoded filename: %s", decodedFilename)
+
+	if decodedFilename == "" {
 		// 尝试从 Content-Disposition 获取文件名
 		if cd := c.Get("Content-Disposition"); cd != "" {
 			if _, params, err := mime.ParseMediaType(cd); err == nil {
 				if fn := params["filename"]; fn != "" {
-					filename = fn
+					decodedFilename = fn
+					log.Printf("Using filename from Content-Disposition: %s", decodedFilename)
 				}
 			}
 		}
-		if filename == "" {
-			return c.Status(400).SendString("Error: No filename specified")
+		if decodedFilename == "" {
+			return fmt.Errorf("no filename specified")
 		}
 	}
 
 	// 生成随机路径
 	path := generateRandomPath()
-	deleteCode := generateRandomString(8)
+	log.Printf("Generated path: %s", path)
 
 	// 确保上传目录存在
 	dirPath := filepath.Join(s.uploadDir, path)
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return c.Status(500).SendString("Error: Failed to create directory")
+		log.Printf("Error creating directory %s: %v", dirPath, err)
+		return fmt.Errorf("failed to create directory: %v", err)
 	}
 
-	// 保存文件
-	filePath := filepath.Join(dirPath, filename)
+	// URL编码文件名用于存储在数据库中
+	encodedFilename := url.QueryEscape(decodedFilename)
+	log.Printf("Encoded filename for database: %s", encodedFilename)
+
+	// 使用原始文件名保存文件
+	filePath := filepath.Join(dirPath, decodedFilename)
 	fileContent := c.Body()
 	if len(fileContent) == 0 {
-		return c.Status(400).SendString("Error: Empty file content")
+		return fmt.Errorf("empty file content")
 	}
 
+	log.Printf("Saving file to: %s", filePath)
 	if err := os.WriteFile(filePath, fileContent, 0644); err != nil {
-		return c.Status(500).SendString("Error: Failed to save file")
+		log.Printf("Error saving file: %v", err)
+		return fmt.Errorf("failed to save file: %v", err)
 	}
 
-	// 获取文件大小和MIME类型
+	// 获取文件信息
 	fileSize := int64(len(fileContent))
 	mimeType := c.Get("Content-Type")
 	if mimeType == "" {
-		mimeType = mime.TypeByExtension(filepath.Ext(filename))
+		mimeType = mime.TypeByExtension(filepath.Ext(decodedFilename))
 		if mimeType == "" {
 			mimeType = http.DetectContentType(fileContent)
 		}
 	}
+	log.Printf("File size: %d, MIME type: %s", fileSize, mimeType)
+
+	// 生成删除码
+	deleteCode := generateRandomString(8)
 
 	// 保存到数据库
-	_, err := s.db.Exec(`
-        INSERT INTO files (path, filename, delete_code, upload_time, file_size, mime_type)
-        VALUES (?, ?, ?, datetime('now'), ?, ?)
-    `, path, filename, deleteCode, fileSize, mimeType)
+	_, err = s.db.Exec(`
+        INSERT INTO files (path, filename, encoded_filename, delete_code, upload_time, file_size, mime_type)
+        VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+    `, path, decodedFilename, encodedFilename, deleteCode, fileSize, mimeType)
 
 	if err != nil {
-		// 如果数据库操作失败，删除已上传的文件
+		log.Printf("Database error: %v", err)
 		os.Remove(filePath)
-		return c.Status(500).SendString("Error: Failed to save file information")
+		return fmt.Errorf("failed to save file information: %v", err)
 	}
 
-	// 检查是否是命令行请求
+	log.Printf("File successfully uploaded. Path: %s, Filename: %s", path, decodedFilename)
+
 	if isTextPreferred(c) {
-	    // Return text format
-	    return c.Type("text").SendString(fmt.Sprintf(`Upload successful!
-	Filename: %s
-	Access URL: http://%s/%s/%s
-	Delete Code: %s
-	Size: %d bytes
-	Type: %s
-	
-	Delete Command:
-	curl -X DELETE "http://%s/delete/%s/%s?code=%s"
-	`,
-	        filename,
-	        c.Hostname(), path, filename,
-	        deleteCode,
-	        fileSize, mimeType,
-	        c.Hostname(), path, filename, deleteCode,
-	    ))
+		return c.Type("text").SendString(fmt.Sprintf(`Upload successful!
+Filename: %s
+Access URL: http://%s/%s/%s
+Delete Code: %s
+Size: %d bytes
+Type: %s
+
+Delete Command:
+curl -X DELETE "http://%s/delete/%s/%s?code=%s"
+`,
+			decodedFilename,
+			c.Hostname(), path, encodedFilename,
+			deleteCode,
+			fileSize, mimeType,
+			c.Hostname(), path, encodedFilename, deleteCode,
+		))
 	}
 
-	// 返回 JSON 格式
 	return c.JSON(fiber.Map{
 		"path":       path,
-		"filename":   filename,
+		"filename":   decodedFilename,
 		"deleteCode": deleteCode,
 		"size":       fileSize,
 		"mimeType":   mimeType,
@@ -215,76 +237,116 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 
 func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 	path := c.Params("path")
-	filename := c.Params("filename")
+	encodedFilename := c.Params("filename")
+	log.Printf("Download request for path: %s, encoded filename: %s", path, encodedFilename)
 
-	// 更新下载计数
-	_, err := s.db.Exec("UPDATE files SET download_count = download_count + 1 WHERE path = ? AND filename = ?",
-		path, filename)
+	// URL解码文件名
+	decodedFilename, err := url.QueryUnescape(encodedFilename)
 	if err != nil {
-		return c.Status(500).SendString("Failed to update download count")
+		log.Printf("Error decoding filename: %v", err)
+		return fmt.Errorf("invalid filename encoding: %v", err)
 	}
 
-	return c.SendFile(filepath.Join(s.uploadDir, path, filename))
+	// 验证文件记录存在
+	var exists bool
+	err = s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? AND encoded_filename = ?)",
+		path, encodedFilename).Scan(&exists)
+	if err != nil || !exists {
+		log.Printf("File not found in database: %v", err)
+		return c.Status(404).SendString("File not found")
+	}
+
+	// 构建文件路径使用解码后的文件名
+	filePath := filepath.Join(s.uploadDir, path, decodedFilename)
+	log.Printf("Attempting to serve file: %s", filePath)
+
+	// 检查文件是否存在
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		log.Printf("File does not exist on disk: %s", filePath)
+		return c.Status(404).SendString("File not found")
+	}
+
+	// 更新下载计数
+	_, err = s.db.Exec("UPDATE files SET download_count = download_count + 1 WHERE path = ? AND encoded_filename = ?",
+		path, encodedFilename)
+	if err != nil {
+		log.Printf("Error updating download count: %v", err)
+	}
+
+	return c.SendFile(filePath)
 }
 
 func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 	path := c.Params("path")
-	filename := c.Params("filename")
+	encodedFilename := c.Params("filename")
 	deleteCode := c.Query("code")
+
+	log.Printf("Delete request for path: %s, encoded filename: %s", path, encodedFilename)
 
 	if deleteCode == "" {
 		return c.Status(400).SendString("Delete code is required")
 	}
 
+	// URL解码文件名
+	decodedFilename, err := url.QueryUnescape(encodedFilename)
+	if err != nil {
+		log.Printf("Error decoding filename: %v", err)
+		return fmt.Errorf("invalid filename encoding: %v", err)
+	}
+
 	// 验证删除码
 	var exists bool
-	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? AND filename = ? AND delete_code = ?)",
-		path, filename, deleteCode).Scan(&exists)
+	err = s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? AND encoded_filename = ? AND delete_code = ?)",
+		path, encodedFilename, deleteCode).Scan(&exists)
 	if err != nil || !exists {
+		log.Printf("Invalid delete request: %v", err)
 		return c.Status(403).SendString("Invalid delete code")
 	}
 
-	// 删除文件
-	filePath := filepath.Join(s.uploadDir, path, filename)
+	// 使用解码后的文件名删除文件
+	filePath := filepath.Join(s.uploadDir, path, decodedFilename)
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		return c.Status(500).SendString("Failed to delete file")
+		log.Printf("Error deleting file: %v", err)
+		return fmt.Errorf("failed to delete file: %v", err)
 	}
 
 	// 删除数据库记录
-	_, err = s.db.Exec("DELETE FROM files WHERE path = ? AND filename = ?", path, filename)
+	_, err = s.db.Exec("DELETE FROM files WHERE path = ? AND encoded_filename = ?", path, encodedFilename)
 	if err != nil {
-		return c.Status(500).SendString("Failed to delete file record")
+		log.Printf("Error deleting database record: %v", err)
+		return fmt.Errorf("failed to delete file record: %v", err)
 	}
 
 	// 尝试删除空目录
 	os.Remove(filepath.Join(s.uploadDir, path))
 
+	log.Printf("File successfully deleted: %s", filePath)
 	return c.SendString("File deleted successfully")
 }
 
 func (s *FileServer) cleanupExpiredFiles() error {
-	// 获取3天前的文件
+	log.Println("Starting cleanup of expired files")
 	query := `
-        SELECT path, filename 
+        SELECT path, encoded_filename, filename 
         FROM files 
         WHERE upload_time < datetime('now', '-3 days')
     `
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start transaction: %v", err)
 	}
 	defer tx.Rollback()
 
 	rows, err := tx.Query(query)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to query expired files: %v", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var path, filename string
-		if err := rows.Scan(&path, &filename); err != nil {
+		var path, encodedFilename, filename string
+		if err := rows.Scan(&path, &encodedFilename, &filename); err != nil {
 			log.Printf("Failed to read file record: %v", err)
 			continue
 		}
@@ -295,12 +357,12 @@ func (s *FileServer) cleanupExpiredFiles() error {
 		}
 
 		dirPath := filepath.Join(s.uploadDir, path)
-		os.Remove(dirPath) // 忽略错误
+		os.Remove(dirPath)
 	}
 
 	_, err = tx.Exec(`DELETE FROM files WHERE upload_time < datetime('now', '-3 days')`)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete expired records: %v", err)
 	}
 
 	return tx.Commit()
@@ -319,22 +381,21 @@ func generateRandomString(length int) string {
 func generateRandomPath() string {
 	return generateRandomString(4)
 }
-
 func isTextPreferred(c *fiber.Ctx) bool {
 	userAgent := c.Get("User-Agent")
 	return strings.HasPrefix(userAgent, "curl/") || strings.HasPrefix(userAgent, "Wget/")
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
 	server, err := NewFileServer()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 设置路由
 	server.setupRoutes()
 
-	// 启动定期清理
 	go func() {
 		for {
 			if err := server.cleanupExpiredFiles(); err != nil {
@@ -344,6 +405,6 @@ func main() {
 		}
 	}()
 
-	// 启动服务器
+	log.Printf("Server starting on :8080")
 	log.Fatal(server.app.Listen(":8080"))
 }

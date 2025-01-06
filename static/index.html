@@ -7,6 +7,90 @@
     <link rel="icon"
           href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
     <link rel="stylesheet" href="static/style.css">
+    <style>
+        .confirm-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.2s;
+            backdrop-filter: blur(2px);
+        }
+
+        .confirm-dialog-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 90%;
+            width: 300px;
+            transform: translateY(20px);
+            transition: transform 0.2s;
+        }
+
+        .confirm-dialog.active .confirm-dialog-content {
+            transform: translateY(0);
+        }
+
+        .confirm-dialog-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .confirm-yes {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .confirm-no {
+            background: #9e9e9e;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .file-item {
+            opacity: 1;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .file-item.deleting {
+            opacity: 0;
+            transform: translateX(20px);
+        }
+    </style>
 </head>
 <body>
 <div class="container">
@@ -18,7 +102,7 @@
     <div class="upload-area" id="dropZone">
         <div class="upload-icon">📦</div>
         <p>拖拽文件到此处或点击选择文件</p>
-        <button class="button" onclick="document.getElementById('fileInput').click()">选择文件</button>
+        <button class="button" id="selectButton">选择文件</button>
         <input type="file" id="fileInput" style="display: none">
 
         <div id="uploadProgress">
@@ -31,7 +115,7 @@
         <div id="uploadResult">
             <h3>上传成功！</h3>
             <div id="resultContent"></div>
-            <button class="button copy-button" onclick="copyResult()">复制信息</button>
+            <button class="button copy-button" id="copyButton">复制信息</button>
         </div>
     </div>
 
@@ -43,246 +127,408 @@
         </p>
     </div>
 
-    <div class="file-list" id="fileList">
-        <!-- 文件列表将通过 JavaScript 动态填充 -->
-    </div>
+    <div class="file-list" id="fileList"></div>
 </div>
 
 <script>
+    // 全局变量和状态
     const baseUrl = window.location.origin;
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
-    const uploadProgress = document.getElementById('uploadProgress');
-    const progressBar = document.querySelector('.progress-bar-fill');
-    const statusText = document.querySelector('.status-text');
-    const uploadResult = document.getElementById('uploadResult');
-    const resultContent = document.getElementById('resultContent');
-    const fileList = document.getElementById('fileList');
+    const APP_STATE = {
+        isUploading: false,
+        pendingDeletions: new Set()
+    };
 
-    // 更新命令行示例
-    document.getElementById('uploadCommand').textContent = `curl -T example.txt ${window.location.host}`;
-    document.getElementById('downloadCommand').textContent = `curl -O ${baseUrl}/xxxx/example.txt`;
-    document.getElementById('deleteCommand').textContent = `curl -X DELETE "${baseUrl}/delete/xxxx/example.txt?code=删除码"`;
+    // DOM 元素缓存
+    const DOM = {
+        dropZone: document.getElementById('dropZone'),
+        fileInput: document.getElementById('fileInput'),
+        selectButton: document.getElementById('selectButton'),
+        uploadProgress: document.getElementById('uploadProgress'),
+        progressBar: document.querySelector('.progress-bar-fill'),
+        statusText: document.querySelector('.status-text'),
+        uploadResult: document.getElementById('uploadResult'),
+        resultContent: document.getElementById('resultContent'),
+        fileList: document.getElementById('fileList'),
+        copyButton: document.getElementById('copyButton')
+    };
 
-    // 初始化事件监听
+    // 初始化
     document.addEventListener('DOMContentLoaded', () => {
-        // 处理拖放
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
-
-        // 处理文件选择
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
-        });
-
-        // 设置 XHR 进度监听
-        const originalXHR = window.XMLHttpRequest;
-        window.XMLHttpRequest = function () {
-            const xhr = new originalXHR();
-            xhr.upload.addEventListener('progress', (e) => {
-                if (e.lengthComputable) {
-                    const percentComplete = (e.loaded / e.total) * 100;
-                    progressBar.style.width = percentComplete + '%';
-                    statusText.textContent = `已上传 ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
-                }
-            });
-            return xhr;
-        };
-
-        // 初始加载文件列表
+        initializeUI();
+        setupEventListeners();
+        setupXHRProgress();
         loadFileList();
     });
 
-    async function handleFile(file) {
-        try {
-            uploadProgress.style.display = 'block';
-            progressBar.style.display = 'block';
-            uploadResult.style.display = 'none';
-            statusText.textContent = '准备上传...';
-            progressBar.style.width = '0%';
+    // 初始化 UI
+    function initializeUI() {
+        document.getElementById('uploadCommand').textContent = `curl -T 文件名 ${window.location.host}`;
+        document.getElementById('downloadCommand').textContent = `curl -O ${baseUrl}/xxxx/文件名`;
+        document.getElementById('deleteCommand').textContent =
+            `curl -X DELETE "${baseUrl}/delete/xxxx/文件名?code=删除码"`;
+    }
 
+    // 设置事件监听
+    function setupEventListeners() {
+        DOM.selectButton.addEventListener('click', () => DOM.fileInput.click());
+        DOM.fileInput.addEventListener('change', handleFileInputChange);
+        DOM.copyButton.addEventListener('click', copyResult);
+        setupDragAndDrop();
+    }
+
+    // 设置拖放处理
+    function setupDragAndDrop() {
+        DOM.dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            DOM.dropZone.classList.add('dragover');
+        });
+
+        DOM.dropZone.addEventListener('dragleave', () => {
+            DOM.dropZone.classList.remove('dragover');
+        });
+
+        DOM.dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            DOM.dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                await handleFile(e.dataTransfer.files[0]);
+            }
+        });
+    }
+
+    // 文件输入变化处理
+    async function handleFileInputChange(e) {
+        if (e.target.files.length > 0) {
+            await handleFile(e.target.files[0]);
+            e.target.value = '';
+        }
+    }
+
+    // XHR 进度监听设置
+    function setupXHRProgress() {
+        const originalXHR = window.XMLHttpRequest;
+        window.XMLHttpRequest = function () {
+            const xhr = new originalXHR();
+            xhr.upload.addEventListener('progress', handleUploadProgress);
+            return xhr;
+        };
+    }
+
+    // 上传进度处理
+    function handleUploadProgress(e) {
+        if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            requestAnimationFrame(() => {
+                DOM.progressBar.style.width = percent + '%';
+                DOM.statusText.textContent = `已上传 ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
+            });
+        }
+    }
+
+    // 文件处理
+    async function handleFile(file) {
+        if (APP_STATE.isUploading) return;
+        APP_STATE.isUploading = true;
+
+        try {
+            showUploadProgress();
             await uploadFile(file);
         } catch (error) {
             console.error('上传失败:', error);
-            statusText.textContent = '上传失败: ' + error.message;
-        }
-    }
-
-    async function uploadFile(file) {
-        try {
-            const response = await fetch(`/${file.name}`, {
-                method: 'PUT',
-                body: file,
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-
-            const path = result.path;
-            const filename = result.filename;
-            const deleteCode = result.deleteCode;
-
-            // 保存完整的文件信息到 localStorage
-            const fileInfo = {
-                path,
-                filename,
-                fileSize: file.size,
-                uploadTime: new Date().toISOString()
-            };
-            localStorage.setItem(`fileInfo_/${path}/${filename}`, JSON.stringify(fileInfo));
-
-            if (deleteCode) {
-                localStorage.setItem(`deleteCode_/${path}/${filename}`, deleteCode);
-            }
-
-            uploadResult.style.display = 'block';
-            const fileUrl = `${baseUrl}/${path}/${filename}`;
-            resultContent.innerHTML = `
-                <p>文件链接: <a href="${fileUrl}" target="_blank">${fileUrl}</a></p>
-                <p>删除码: ${deleteCode}</p>
-            `;
-
-            loadFileList();
-        } catch (error) {
-            console.error('Upload failed:', error);
-            throw error;
+            showToast('上传失败: ' + error.message);
         } finally {
-            uploadProgress.style.display = 'none';
+            APP_STATE.isUploading = false;
+            hideUploadProgress();
         }
     }
 
-    function loadFileList() {
-        fileList.innerHTML = '';
+    // 显示上传进度
+    function showUploadProgress() {
+        DOM.uploadProgress.style.display = 'block';
+        DOM.progressBar.style.width = '0%';
+        DOM.uploadResult.style.display = 'none';
+        DOM.statusText.textContent = '准备上传...';
+    }
 
-        const files = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key.startsWith('fileInfo_/')) {
-                const fileInfo = JSON.parse(localStorage.getItem(key));
-                const deleteCode = localStorage.getItem(`deleteCode_/${fileInfo.path}/${fileInfo.filename}`);
-                files.push({...fileInfo, deleteCode});
+    // 隐藏上传进度
+    function hideUploadProgress() {
+        DOM.uploadProgress.style.display = 'none';
+    }
+
+    // 文件上传
+    async function uploadFile(file) {
+        const encodedFilename = encodeURIComponent(file.name);
+        const response = await fetch(`/${encodedFilename}`, {
+            method: 'PUT',
+            body: file,
+            headers: {
+                'Accept': 'application/json'
             }
+        });
+
+        if (!response.ok) {
+            throw new Error(`上传失败: ${response.status}`);
         }
 
-        if (files.length === 0) {
-            fileList.innerHTML = '';
-            return;
-        }
-
-        const title = document.createElement('h3');
-        title.textContent = '已上传的文件';
-        title.style.marginBottom = '15px';
-        fileList.appendChild(title);
-
-        files.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime))
-            .forEach(file => {
-                fileList.appendChild(createFileListItem(file));
-            });
+        const result = await response.json();
+        await handleUploadSuccess(result, file);
     }
 
+    // 处理上传成功
+    async function handleUploadSuccess(result, file) {
+        const fileInfo = {
+            path: result.path,
+            filename: result.filename,
+            fileSize: file.size,
+            uploadTime: new Date().toISOString()
+        };
+
+        saveFileInfo(fileInfo, result.deleteCode);
+        showUploadResult(result);
+        await loadFileList();
+    }
+
+    // 保存文件信息
+    function saveFileInfo(fileInfo, deleteCode) {
+        localStorage.setItem(
+            `fileInfo_/${fileInfo.path}/${fileInfo.filename}`,
+            JSON.stringify(fileInfo)
+        );
+        if (deleteCode) {
+            localStorage.setItem(
+                `deleteCode_/${fileInfo.path}/${fileInfo.filename}`,
+                deleteCode
+            );
+        }
+    }
+
+    // 显示上传结果
+    function showUploadResult(result) {
+        DOM.uploadResult.style.display = 'block';
+        const encodedUrl = `${baseUrl}/${result.path}/${encodeURIComponent(result.filename)}`;
+        const displayUrl = `${baseUrl}/${result.path}/${result.filename}`; // 显示用的URL，使用原始文件名
+        DOM.resultContent.innerHTML = `
+        <p>文件链接: <a href="${encodedUrl}" data-url="${encodedUrl}" target="_blank">${displayUrl}</a></p>
+        <p>删除码: ${result.deleteCode}</p>
+    `;
+    }
+
+    // 创建确认对话框
+    function createConfirmDialog(message) {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('div');
+            dialog.className = 'confirm-dialog';
+            dialog.innerHTML = `
+            <div class="confirm-dialog-content">
+                <p>${message}</p>
+                <div class="confirm-dialog-buttons">
+                    <button class="confirm-yes">确定</button>
+                    <button class="confirm-no">取消</button>
+                </div>
+            </div>
+        `;
+
+            document.body.appendChild(dialog);
+            requestAnimationFrame(() => {
+                dialog.style.opacity = '1';
+                dialog.classList.add('active');
+            });
+
+            function closeDialog(result) {
+                dialog.style.opacity = '0';
+                dialog.classList.remove('active');
+                setTimeout(() => {
+                    dialog.remove();
+                    resolve(result);
+                }, 200);
+            }
+
+            dialog.querySelector('.confirm-yes').onclick = () => closeDialog(true);
+            dialog.querySelector('.confirm-no').onclick = () => closeDialog(false);
+        });
+    }
+
+    // 创建文件列表项
     function createFileListItem(file) {
         const div = document.createElement('div');
         div.className = 'file-item';
 
         const uploadDate = new Date(file.uploadTime).toLocaleString();
+        const encodedFilename = encodeURIComponent(file.filename);
 
-        div.innerHTML = `
-        <div class="file-info">
-            <div class="file-name">${file.filename}</div>
-            <div class="file-meta">
-                <span class="file-size">${formatFileSize(file.fileSize)}</span>
-                <span class="upload-time">${uploadDate}</span>
-            </div>
-        </div>
-        <div class="file-actions">
-            <a href="/${file.path}/${file.filename}" class="button" download>下载</a>
-            ${file.deleteCode ? `<button class="button delete-button" onclick="deleteFile('${file.path}', '${file.filename}', '${file.deleteCode}')">删除</button>` : ''}
+        const fileInfo = document.createElement('div');
+        fileInfo.className = 'file-info';
+        fileInfo.innerHTML = `
+        <div class="file-name">${file.filename}</div>
+        <div class="file-meta">
+            <span class="file-size">${formatFileSize(file.fileSize)}</span>
+            <span class="upload-time">${uploadDate}</span>
         </div>
     `;
 
+        const fileActions = document.createElement('div');
+        fileActions.className = 'file-actions';
+
+        const downloadLink = document.createElement('a');
+        downloadLink.href = `/${file.path}/${encodedFilename}`;
+        downloadLink.className = 'button';
+        downloadLink.setAttribute('download', file.filename);
+        downloadLink.textContent = '下载';
+        fileActions.appendChild(downloadLink);
+
+        if (file.deleteCode) {
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'button delete-button';
+            deleteButton.textContent = '删除';
+            deleteButton.onclick = (e) => handleDelete(e, file);
+            fileActions.appendChild(deleteButton);
+        }
+
+        div.appendChild(fileInfo);
+        div.appendChild(fileActions);
         return div;
     }
 
-    async function deleteFile(path, filename, deleteCode) {
-        if (!confirm('确定要删除这个文件吗？')) {
+    // 处理删除操作
+    async function handleDelete(event, file) {
+        event.preventDefault();
+        const button = event.target;
+        const fileItem = button.closest('.file-item');
+
+        if (button.disabled || APP_STATE.pendingDeletions.has(fileItem)) {
             return;
         }
 
+        const confirmed = await createConfirmDialog('确定要删除这个文件吗？');
+        if (!confirmed) return;
+
+        button.disabled = true;
+        const originalText = button.textContent;
+        button.textContent = '删除中...';
+        APP_STATE.pendingDeletions.add(fileItem);
+
         try {
-            const response = await fetch(`/delete/${path}/${filename}?code=${deleteCode}`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to delete file');
-            }
-
-            localStorage.removeItem(`deleteCode_/${path}/${filename}`);
-            localStorage.removeItem(`fileInfo_/${path}/${filename}`);
-            loadFileList();
+            await performDelete(file, fileItem);
+            showToast('文件已删除');
         } catch (error) {
-            console.error('Error deleting file:', error);
-            alert('删除文件失败');
+            console.error('删除失败:', error);
+            showToast('删除失败: ' + error.message);
+            button.disabled = false;
+            button.textContent = originalText;
+        } finally {
+            APP_STATE.pendingDeletions.delete(fileItem);
         }
     }
 
-    async function copyResult() {
-        const content = resultContent.innerText;
+    // 执行删除
+    async function performDelete(file, fileItem) {
+        const encodedFilename = encodeURIComponent(file.filename);
+        const response = await fetch(
+            `/delete/${file.path}/${encodedFilename}?code=${file.deleteCode}`,
+            {method: 'DELETE'}
+        );
 
+        if (!response.ok) {
+            throw new Error(await response.text() || '删除失败');
+        }
+
+        await animateAndRemove(fileItem, file);
+    }
+
+    // 动画移除元素
+    function animateAndRemove(element, file) {
+        return new Promise(resolve => {
+            element.classList.add('deleting');
+            element.style.height = element.offsetHeight + 'px';
+
+            requestAnimationFrame(() => {
+                element.style.height = '0';
+                element.style.margin = '0';
+                element.style.padding = '0';
+                element.style.opacity = '0';
+            });
+
+            setTimeout(() => {
+                element.remove();
+                localStorage.removeItem(`deleteCode_/${file.path}/${file.filename}`);
+                localStorage.removeItem(`fileInfo_/${file.path}/${file.filename}`);
+                checkEmptyFileList();
+                resolve();
+            }, 300);
+        });
+    }
+
+    // 加载文件列表
+    async function loadFileList() {
+        DOM.fileList.innerHTML = '';
+        const files = getStoredFiles();
+
+        if (files.length === 0) return;
+
+        const title = document.createElement('h3');
+        title.textContent = '已上传的文件';
+        title.style.marginBottom = '15px';
+        DOM.fileList.appendChild(title);
+
+        const fragment = document.createDocumentFragment();
+        files.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime))
+            .forEach(file => {
+                fragment.appendChild(createFileListItem(file));
+            });
+
+        DOM.fileList.appendChild(fragment);
+    }
+
+    // 获取存储的文件
+    function getStoredFiles() {
+        const files = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('fileInfo_/')) {
+                try {
+                    const fileInfo = JSON.parse(localStorage.getItem(key));
+                    const deleteCode = localStorage.getItem(`deleteCode_/${fileInfo.path}/${fileInfo.filename}`);
+                    if (fileInfo && fileInfo.path && fileInfo.filename) {
+                        files.push({...fileInfo, deleteCode});
+                    }
+                } catch (error) {
+                    console.error('Error parsing file info:', error);
+                    // 清理无效的存储项
+                    localStorage.removeItem(key);
+                }
+            }
+        }
+        return files;
+    }
+
+    // 复制结果
+    async function copyResult() {
         try {
-            await navigator.clipboard.writeText(content);
+            const link = DOM.resultContent.querySelector('a');
+            const displayUrl = link.textContent;
+            const deleteCode = DOM.resultContent.textContent.match(/删除码: (.+)/)?.[1] || '';
+
+            // 组织复制内容，使用原始文件名的URL
+            const copyText = `文件链接: ${displayUrl}\n删除码: ${deleteCode}`;
+
+            await navigator.clipboard.writeText(copyText);
             showToast('复制成功！');
         } catch (err) {
             console.error('复制失败:', err);
             showToast('复制失败');
         }
     }
-
-    // 分离 toast 显示逻辑
-    function showToast(message) {
+    
+    // 显示 Toast 消息
+    function showToast(message, duration = 2000) {
         const toast = document.createElement('div');
+        toast.className = 'toast';
         toast.textContent = message;
-        toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0,0,0,0.8);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 4px;
-        font-size: 14px;
-        z-index: 1000;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    `;
 
         document.body.appendChild(toast);
-        requestAnimationFrame(() => toast.style.opacity = '1');
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+        });
 
         setTimeout(() => {
             toast.style.opacity = '0';
@@ -291,12 +537,30 @@
                     document.body.removeChild(toast);
                 }
             }, 300);
-        }, 2000);
+        }, duration);
     }
 
+    // 检查空文件列表
+    function checkEmptyFileList() {
+        const remainingFiles = DOM.fileList.querySelectorAll('.file-item');
+        if (remainingFiles.length === 0) {
+            const title = DOM.fileList.querySelector('h3');
+            if (title) {
+                title.style.transition = 'opacity 0.3s ease';
+                title.style.opacity = '0';
+                setTimeout(() => {
+                    if (DOM.fileList.contains(title)) {
+                        title.remove();
+                    }
+                }, 300);
+            }
+        }
+    }
+
+    // 格式化文件大小
     function formatFileSize(bytes) {
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         if (bytes === 0) return '0 B';
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
         return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
     }
