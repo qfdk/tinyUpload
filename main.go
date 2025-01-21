@@ -277,51 +277,91 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 }
 
 func (s *FileServer) handleDelete(c *fiber.Ctx) error {
-	path := c.Params("path")
-	encodedFilename := c.Params("filename")
-	deleteCode := c.Query("code")
+    // 1. 获取参数
+    path := c.Params("path")
+    encodedFilename := c.Params("filename")
+    encodedDeleteCode := c.Query("code")
 
-	log.Printf("Delete request for path: %s, encoded filename: %s", path, encodedFilename)
+    // 2. 参数解码
+    decodedFilename, err := url.QueryUnescape(encodedFilename)
+    if err != nil {
+        log.Printf("文件名解码错误: %v", err)
+        return c.Status(400).SendString("Invalid filename encoding")
+    }
 
-	if deleteCode == "" {
-		return c.Status(400).SendString("Delete code is required")
-	}
+    decodedDeleteCode, err := url.QueryUnescape(encodedDeleteCode)
+    if err != nil {
+        log.Printf("删除码解码错误: %v", err)
+        return c.Status(400).SendString("Invalid delete code encoding")
+    }
 
-	// URL解码文件名
-	decodedFilename, err := url.QueryUnescape(encodedFilename)
-	if err != nil {
-		log.Printf("Error decoding filename: %v", err)
-		return fmt.Errorf("invalid filename encoding: %v", err)
-	}
+    log.Printf("删除请求 - 路径: %s, 解码后文件名: %s, 解码后删除码: %s", 
+        path, decodedFilename, decodedDeleteCode)
 
-	// 验证删除码
-	var exists bool
-	err = s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? AND encoded_filename = ? AND delete_code = ?)",
-		path, encodedFilename, deleteCode).Scan(&exists)
-	if err != nil || !exists {
-		log.Printf("Invalid delete request: %v", err)
-		return c.Status(403).SendString("Invalid delete code")
-	}
+    // 3. 验证删除码
+    var exists bool
+    err = s.db.QueryRow(
+        "SELECT EXISTS(SELECT 1 FROM files WHERE path = ? AND encoded_filename = ? AND delete_code = ?)",
+        path, encodedFilename, decodedDeleteCode,
+    ).Scan(&exists)
 
-	// 使用解码后的文件名删除文件
-	filePath := filepath.Join(s.uploadDir, path, decodedFilename)
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		log.Printf("Error deleting file: %v", err)
-		return fmt.Errorf("failed to delete file: %v", err)
-	}
+    if err != nil {
+        log.Printf("数据库查询错误: %v", err)
+        return c.Status(500).SendString("Internal server error")
+    }
 
-	// 删除数据库记录
-	_, err = s.db.Exec("DELETE FROM files WHERE path = ? AND encoded_filename = ?", path, encodedFilename)
-	if err != nil {
-		log.Printf("Error deleting database record: %v", err)
-		return fmt.Errorf("failed to delete file record: %v", err)
-	}
+    if !exists {
+        log.Printf("删除验证失败 - path: %s, encodedFilename: %s, deleteCode: %s",
+            path, encodedFilename, decodedDeleteCode)
+        return c.Status(403).SendString("Invalid delete code")
+    }
 
-	// 尝试删除空目录
-	os.Remove(filepath.Join(s.uploadDir, path))
+    // 4. 获取文件信息
+    var filePath string
+    err = s.db.QueryRow(
+        "SELECT file_path FROM files WHERE path = ? AND encoded_filename = ?",
+        path, encodedFilename,
+    ).Scan(&filePath)
 
-	log.Printf("File successfully deleted: %s", filePath)
-	return c.SendString("File deleted successfully")
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return c.Status(404).SendString("File not found")
+        }
+        log.Printf("获取文件路径错误: %v", err)
+        return c.Status(500).SendString("Internal server error")
+    }
+
+    // 5. 删除物理文件
+    err = os.Remove(filePath)
+    if err != nil {
+        log.Printf("删除文件错误: %v", err)
+        return c.Status(500).SendString("Failed to delete file")
+    }
+
+    // 6. 删除数据库记录
+    result, err := s.db.Exec(
+        "DELETE FROM files WHERE path = ? AND encoded_filename = ?",
+        path, encodedFilename,
+    )
+    if err != nil {
+        log.Printf("删除数据库记录错误: %v", err)
+        return c.Status(500).SendString("Failed to delete database record")
+    }
+
+    affected, err := result.RowsAffected()
+    if err != nil {
+        log.Printf("获取影响行数错误: %v", err)
+        return c.Status(500).SendString("Internal server error")
+    }
+
+    if affected == 0 {
+        log.Printf("没有记录被删除 - path: %s, encodedFilename: %s", path, encodedFilename)
+        return c.Status(404).SendString("File not found")
+    }
+
+    // 7. 删除成功
+    log.Printf("文件删除成功 - path: %s, filename: %s", path, decodedFilename)
+    return c.SendStatus(200)
 }
 
 func (s *FileServer) cleanupExpiredFiles() error {
