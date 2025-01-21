@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# 拉取最新代码
+echo "Pulling latest code..."
+git pull origin main
+
 # 备份运行中的镜像
 echo "Backing up current image..."
 docker tag tiny-upload:latest tiny-upload:rollback 2>/dev/null || true
