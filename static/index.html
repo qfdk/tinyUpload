@@ -423,15 +423,24 @@
     // 执行删除
     async function performDelete(file, fileItem) {
         const encodedFilename = encodeURIComponent(file.filename);
+        const encodedDeleteCode = encodeURIComponent(file.deleteCode);
+    
+        console.log('Debug info:', {
+            originalFilename: file.filename,
+            encodedFilename: encodedFilename,
+            originalDeleteCode: file.deleteCode,
+            encodedDeleteCode: encodedDeleteCode
+        });
+    
         const response = await fetch(
-            `/delete/${file.path}/${encodedFilename}?code=${file.deleteCode}`,
+            `/delete/${file.path}/${encodedFilename}?code=${encodedDeleteCode}`,
             {method: 'DELETE'}
         );
-
+    
         if (!response.ok) {
             throw new Error(await response.text() || '删除失败');
         }
-
+    
         await animateAndRemove(fileItem, file);
     }
 
