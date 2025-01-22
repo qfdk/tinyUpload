@@ -425,7 +425,7 @@
         const encodedFilename = encodeURIComponent(file.filename);
         const encodedOriginalFilename = encodeURIComponent(file.originalFilename);
         const encodedDeleteCode = encodeURIComponent(file.deleteCode);
-    
+
         console.log('Debug info:', {
             filename: file.filename,
             originalFilename: file.originalFilename,
@@ -434,16 +434,12 @@
             deleteCode: file.deleteCode,
             encodedDeleteCode: encodedDeleteCode
         });
-    
-        const response = await fetch(
+
+        await fetch(
             `/delete/${file.path}/${encodedFilename}?code=${encodedDeleteCode}&original=${encodedOriginalFilename}`,
             {method: 'DELETE'}
         );
-    
-        if (!response.ok) {
-            throw new Error(await response.text() || '删除失败');
-        }
-    
+
         await animateAndRemove(fileItem, file);
     }
 
@@ -530,7 +526,7 @@
             showToast('复制失败');
         }
     }
-    
+
     // 显示 Toast 消息
     function showToast(message, duration = 2000) {
         const toast = document.createElement('div');
