@@ -71,8 +71,13 @@ func NewFileServer() (*FileServer, error) {
        },
    })
 
-   app.Use(logger.New())
-   app.Use(compress.New(compress.Config{
+   app.Use(logger.New(logger.Config{
+       Next: func(c *fiber.Ctx) bool {
+           return strings.HasPrefix(c.Path(), "/static/") || c.Path() == "/favicon.ico"
+       },
+   }))
+   
+  app.Use(compress.New(compress.Config{
        Level: compress.LevelBestSpeed,
    }))
    app.Use(cors.New())
