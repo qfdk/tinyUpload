@@ -94,7 +94,6 @@ func (s *FileServer) setupRoutes() {
    s.app.Get("/:path/:filename", s.handleDownload)
    s.app.Delete("/delete/:path/:filename", s.handleDelete)
    
-   // Handle all other routes
    s.app.Use(func(c *fiber.Ctx) error {
        return c.Status(404).SendString("Not Found")
    })
@@ -150,6 +149,9 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
    }
 
    encodedFilename := url.QueryEscape(decodedFilename)
+   log.Printf("Saving to DB - path: %s, filename: %s, encoded: %s", 
+       path, decodedFilename, encodedFilename)
+       
    filePath := filepath.Join(dirPath, decodedFilename)
    fileContent := c.Body()
    if len(fileContent) == 0 {
@@ -213,9 +215,16 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
    path := c.Params("path")
    requestFilename := c.Params("filename")
    
+   decodedRequestFilename, err := url.QueryUnescape(requestFilename)
+   if err != nil {
+       return c.Status(404).SendString("File not found")
+   }
+   
+   encodedRequestFilename := url.QueryEscape(decodedRequestFilename)
+   
    var originalFilename string
-   err := s.db.QueryRow("SELECT filename FROM files WHERE path = ? AND encoded_filename = ?",
-       path, requestFilename).Scan(&originalFilename)
+   err = s.db.QueryRow("SELECT filename FROM files WHERE path = ? AND encoded_filename = ?",
+       path, encodedRequestFilename).Scan(&originalFilename)
    if err != nil {
        return c.Status(404).SendString("File not found")
    }
@@ -226,7 +235,7 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
    }
 
    _, err = s.db.Exec("UPDATE files SET download_count = download_count + 1 WHERE path = ? AND encoded_filename = ?",
-       path, requestFilename)
+       path, encodedRequestFilename)
    if err != nil {
        log.Printf("Error updating download count: %v", err)
    }
@@ -236,18 +245,15 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 
 func (s *FileServer) handleDelete(c *fiber.Ctx) error {
    path := c.Params("path")
-   encodedFilename := c.Params("filename")
+   requestFilename := c.Params("filename")
    encodedDeleteCode := c.Query("code")
 
-   decodedFilename, err := url.QueryUnescape(encodedFilename)
+   decodedFilename, err := url.QueryUnescape(requestFilename)
    if err != nil {
        return c.Status(404).SendString("File not found")
    }
-
-   filePath := filepath.Join(s.uploadDir, path, decodedFilename)
-   if _, err := os.Stat(filePath); os.IsNotExist(err) {
-       return c.Status(404).SendString("File not found")
-   }
+   
+   encodedFilename := url.QueryEscape(decodedFilename)
 
    decodedDeleteCode, err := url.QueryUnescape(encodedDeleteCode)
    if err != nil {
@@ -267,6 +273,7 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
        return c.Status(500).SendString("Internal server error")
    }
 
+   filePath := filepath.Join(s.uploadDir, path, filename)
    if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
        log.Printf("Error deleting file: %v", err)
    }
