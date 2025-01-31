@@ -376,6 +376,11 @@
                 element.remove();
                 localStorage.removeItem(`deleteCode_/${file.path}/${file.filename}`);
                 localStorage.removeItem(`fileInfo_/${file.path}/${file.filename}`);
+
+                // 清除上传结果区域
+                DOM.uploadResult.style.display = 'none';
+                DOM.resultContent.innerHTML = '';
+
                 checkEmptyFileList();
                 resolve();
             }, 300);
