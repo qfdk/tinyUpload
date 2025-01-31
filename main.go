@@ -93,6 +93,10 @@ func (s *FileServer) setupRoutes() {
    s.app.Put("/:filename", s.handleUpload)
    s.app.Get("/:path/:filename", s.handleDownload)
    s.app.Delete("/delete/:path/:filename", s.handleDelete)
+   // 处理其他所有路径
+   s.app.Use(func(c *fiber.Ctx) error {
+     return c.Status(404).SendString("File not found")
+   })
 }
 
 func (s *FileServer) handleRoot(c *fiber.Ctx) error {
