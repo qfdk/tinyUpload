@@ -23,7 +23,7 @@ import (
 
 type FileServer struct {
    db        *sql.DB
-   uploadDir string 
+   uploadDir string
    app       *fiber.App
 }
 
@@ -66,8 +66,8 @@ func NewFileServer() (*FileServer, error) {
        WriteTimeout: 30 * time.Second,
        IdleTimeout:  60 * time.Second,
        ErrorHandler: func(c *fiber.Ctx, err error) error {
-           log.Printf("Error: %v", err)
-           return c.Status(500).SendString("Internal Server Error")
+           log.Printf("Error: %v", err) 
+           return c.Status(404).SendString("Not Found")
        },
    })
 
@@ -93,9 +93,10 @@ func (s *FileServer) setupRoutes() {
    s.app.Put("/:filename", s.handleUpload)
    s.app.Get("/:path/:filename", s.handleDownload)
    s.app.Delete("/delete/:path/:filename", s.handleDelete)
-   // 处理其他所有路径
+   
+   // Handle all other routes
    s.app.Use(func(c *fiber.Ctx) error {
-     return c.Status(404).SendString("File not found")
+       return c.Status(404).SendString("Not Found")
    })
 }
 
@@ -210,27 +211,22 @@ curl -X DELETE "http://%s/delete/%s/%s?code=%s"`,
 
 func (s *FileServer) handleDownload(c *fiber.Ctx) error {
    path := c.Params("path")
-   encodedFilename := c.Params("filename")
-
-   decodedFilename, err := url.QueryUnescape(encodedFilename) 
+   requestFilename := c.Params("filename")
+   
+   var originalFilename string
+   err := s.db.QueryRow("SELECT filename FROM files WHERE path = ? AND encoded_filename = ?",
+       path, requestFilename).Scan(&originalFilename)
    if err != nil {
        return c.Status(404).SendString("File not found")
    }
 
-   filePath := filepath.Join(s.uploadDir, path, decodedFilename)
+   filePath := filepath.Join(s.uploadDir, path, originalFilename)
    if _, err := os.Stat(filePath); os.IsNotExist(err) {
        return c.Status(404).SendString("File not found")
    }
 
-   var exists bool
-   err = s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? AND encoded_filename = ?)",
-       path, encodedFilename).Scan(&exists)
-   if err != nil || !exists {
-       return c.Status(404).SendString("File not found")
-   }
-
    _, err = s.db.Exec("UPDATE files SET download_count = download_count + 1 WHERE path = ? AND encoded_filename = ?",
-       path, encodedFilename)
+       path, requestFilename)
    if err != nil {
        log.Printf("Error updating download count: %v", err)
    }
