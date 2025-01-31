@@ -65,6 +65,9 @@ func NewFileServer() (*FileServer, error) {
        ReadTimeout:  30 * time.Second,
        WriteTimeout: 30 * time.Second,
        IdleTimeout:  60 * time.Second,
+       ProxyHeader:   "X-Real-IP",
+       EnableTrustedProxyCheck: true,
+       TrustedProxies: []string{"127.0.0.1", "::1","172.17.0.1","192.168.1.8"},
        ErrorHandler: func(c *fiber.Ctx, err error) error {
            log.Printf("Error: %v", err)
            return c.Redirect("/", 302)
