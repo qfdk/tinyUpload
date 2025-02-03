@@ -13,6 +13,16 @@
 
 ## 安装
 
+### Docker 快速开始
+```bash
+docker run -d \
+  --name tiny-upload \
+  -v /data:/app/data \
+  --user root \
+  -w /app \
+  qfdk/tiny-upload
+```
+
 ### Docker安装
 
 ```bash

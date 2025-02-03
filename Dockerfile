@@ -27,23 +27,26 @@ RUN go mod download -x
 COPY . .
 # 从 html-builder 复制压缩后的 HTML 文件
 COPY --from=html-builder /build/static/index.min.html ./static/index.html
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o tinyUpload
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o tiny-upload
 
 # 最终阶段
 FROM alpine:latest
 RUN apk add --no-cache sqlite-libs ca-certificates tzdata
 
-RUN adduser -D -u 1000 appuser && \
-    mkdir -p /app/{data/uploads,static} && \
-    chown -R appuser:appuser /app
+# 创建用户和必要目录
+RUN adduser -D -u 1000 appuser
 
-COPY --chown=appuser:appuser --from=builder /build/tinyUpload /app/
-COPY --chown=appuser:appuser --from=builder /build/static /app/static
+WORKDIR /app
+RUN mkdir -p data/uploads static && \
+    chown -R appuser:appuser .
+
+# 复制文件并设置权限
+COPY --chown=appuser:appuser --from=builder /build/tiny-upload ./
+COPY --chown=appuser:appuser --from=builder /build/static ./static
 
 USER appuser
-WORKDIR /app
 
-VOLUME ["/app/data"]
+VOLUME ["./data"]
 EXPOSE 8080
 
-ENTRYPOINT ["./tinyUpload"]
+ENTRYPOINT ["./tiny-upload"]
