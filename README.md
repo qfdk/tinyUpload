@@ -18,8 +18,7 @@
 docker run -d \
   --name tiny-upload \
   -v /data:/app/data \
-  --user root \
-  -w /app \
+  -p 8080:8080 \
   qfdk/tiny-upload
 ```
 

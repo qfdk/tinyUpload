@@ -46,7 +46,7 @@ COPY --chown=appuser:appuser --from=builder /build/static ./static
 
 USER appuser
 
-VOLUME ["./data"]
+VOLUME ["/app/data"]
 EXPOSE 8080
 
-ENTRYPOINT ["./tiny-upload"]
+ENTRYPOINT ["/app/tiny-upload"]
