@@ -299,7 +299,7 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
        log.Printf("Failed to remove directory (may not be empty): %v", err)
    }
 
-   return c.SendStatus(200).SendString("OK\n")
+   return c.Status(200).SendString("OK\n")
 }
 
 func (s *FileServer) cleanupExpiredFiles() error {
