@@ -200,7 +200,8 @@ Size: %d bytes
 Type: %s
 
 Delete Command:
-curl -X DELETE "http://%s/delete/%s/%s?code=%s"\n`,
+curl -X DELETE "http://%s/delete/%s/%s?code=%s"
+                                                    `,
            decodedFilename,
            c.Hostname(), path, encodedFilename,
            deleteCode,
