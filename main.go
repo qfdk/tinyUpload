@@ -124,7 +124,7 @@ Download File:
 Delete File:
  curl -X DELETE "%s/delete/xxxx/filename?code=delete_code"
 
-Server Time: %s`, host, host, host, host, host, now))
+Server Time: %s\n`, host, host, host, host, host, now))
    }
 
    return c.SendFile("static/index.html")
@@ -134,7 +134,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
    filename := c.Params("filename")
    decodedFilename, err := url.QueryUnescape(filename)
    if err != nil {
-       return c.Status(400).SendString("Invalid filename")
+       return c.Status(400).SendString("Invalid filename\n")
    }
 
    if decodedFilename == "" {
@@ -146,14 +146,14 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
            }
        }
        if decodedFilename == "" {
-           return c.Status(400).SendString("No filename specified")
+           return c.Status(400).SendString("No filename specified\n")
        }
    }
 
    path := generateRandomPath()
    dirPath := filepath.Join(s.uploadDir, path)
    if err := os.MkdirAll(dirPath, 0755); err != nil {
-       return c.Status(500).SendString("Failed to create directory")
+       return c.Status(500).SendString("Failed to create directory\n")
    }
 
    encodedFilename := url.QueryEscape(decodedFilename)
@@ -163,11 +163,11 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
    filePath := filepath.Join(dirPath, decodedFilename)
    fileContent := c.Body()
    if len(fileContent) == 0 {
-       return c.Status(400).SendString("Empty file content")
+       return c.Status(400).SendString("Empty file content\n")
    }
 
    if err := os.WriteFile(filePath, fileContent, 0644); err != nil {
-       return c.Status(500).SendString("Failed to save file")
+       return c.Status(500).SendString("Failed to save file\n")
    }
 
    fileSize := int64(len(fileContent))
@@ -188,7 +188,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 
    if err != nil {
        os.Remove(filePath)
-       return c.Status(500).SendString("Failed to save file information")
+       return c.Status(500).SendString("Failed to save file information\n")
    }
 
    if isTextPreferred(c) {
@@ -200,7 +200,7 @@ Size: %d bytes
 Type: %s
 
 Delete Command:
-curl -X DELETE "http://%s/delete/%s/%s?code=%s"`,
+curl -X DELETE "http://%s/delete/%s/%s?code=%s"\n`,
            decodedFilename,
            c.Hostname(), path, encodedFilename,
            deleteCode,
@@ -225,7 +225,7 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
    
    decodedRequestFilename, err := url.QueryUnescape(requestFilename)
    if err != nil {
-       return c.Status(404).SendString("File not found")
+       return c.Status(404).SendString("File not found\n")
    }
    
    encodedRequestFilename := url.QueryEscape(decodedRequestFilename)
@@ -234,12 +234,12 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
    err = s.db.QueryRow("SELECT filename FROM files WHERE path = ? AND encoded_filename = ?",
        path, encodedRequestFilename).Scan(&originalFilename)
    if err != nil {
-       return c.Status(404).SendString("File not found")
+       return c.Status(404).SendString("File not found\n")
    }
 
    filePath := filepath.Join(s.uploadDir, path, originalFilename)
    if _, err := os.Stat(filePath); os.IsNotExist(err) {
-       return c.Status(404).SendString("File not found")
+       return c.Status(404).SendString("File not found\n")
    }
 
    _, err = s.db.Exec("UPDATE files SET download_count = download_count + 1 WHERE path = ? AND encoded_filename = ?",
@@ -258,14 +258,14 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 
    decodedFilename, err := url.QueryUnescape(requestFilename)
    if err != nil {
-       return c.Status(404).SendString("File not found")
+       return c.Status(404).SendString("File not found\n")
    }
    
    encodedFilename := url.QueryEscape(decodedFilename)
 
    decodedDeleteCode, err := url.QueryUnescape(encodedDeleteCode)
    if err != nil {
-       return c.Status(400).SendString("Invalid delete code")
+       return c.Status(400).SendString("Invalid delete code\n")
    }
 
    var filename string
@@ -276,9 +276,9 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 
    if err != nil {
        if err == sql.ErrNoRows {
-           return c.Status(403).SendString("Invalid delete code")
+           return c.Status(403).SendString("Invalid delete code\n")
        }
-       return c.Status(500).SendString("Internal server error")
+       return c.Status(500).SendString("Internal server error\n")
    }
 
    filePath := filepath.Join(s.uploadDir, path, filename)
@@ -291,7 +291,7 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
        path, encodedFilename, decodedDeleteCode,
    )
    if err != nil {
-       return c.Status(500).SendString("Failed to delete file record")
+       return c.Status(500).SendString("Failed to delete file record\n")
    }
 
    dirPath := filepath.Join(s.uploadDir, path)
@@ -299,7 +299,7 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
        log.Printf("Failed to remove directory (may not be empty): %v", err)
    }
 
-   return c.SendStatus(200)
+   return c.SendStatus(200).SendString("OK\n")
 }
 
 func (s *FileServer) cleanupExpiredFiles() error {
