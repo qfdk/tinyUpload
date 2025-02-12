@@ -201,7 +201,7 @@ Type: %s
 
 Delete Command:
 curl -X DELETE "http://%s/delete/%s/%s?code=%s"
-                                                    `,
+`,
            decodedFilename,
            c.Hostname(), path, encodedFilename,
            deleteCode,
