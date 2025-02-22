@@ -127,8 +127,10 @@ Delete File:
 Server Time: %s
 `, host, host, host, host, host, now))
 	}
-
-	return c.SendFile("static/index.html")
+	return c.Render("static/index.html", fiber.Map{
+		"ServerHost": c.Hostname(),
+		"Protocol":   c.Protocol(),
+	})
 }
 
 func (s *FileServer) handleUpload(c *fiber.Ctx) error {
