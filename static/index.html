@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="简单、安全的文件上传服务，支持拖拽上传和命令行操作">
+    <meta name="keywords" content="文件上传,file upload,简单上传,drag drop">
+    <meta name="theme-color" content="#2196F3">
     <title>{{.ServerHost}} - 简单上传, Simple Is Beautiful</title>
-    <link rel="icon"
-          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
     <link rel="stylesheet" href="static/style.css">
+    <link rel="preload" href="static/app.js" as="script">
 </head>
 <body>
 <div class="container">
@@ -15,484 +18,59 @@
         <p class="site-description">简单上传, Simple Is Beautiful</p>
     </header>
 
-    <div class="upload-area" id="dropZone">
-        <div class="upload-icon">📦</div>
-        <p>拖拽文件到此处或点击选择文件</p>
-        <button class="button" id="selectButton">选择文件</button>
-        <input type="file" id="fileInput" style="display: none">
+    <main class="upload-area" id="dropZone" role="main" aria-label="文件上传区域">
+        <div class="upload-icon" aria-hidden="true">📦</div>
+        <p class="upload-hint">拖拽文件到此处或点击选择文件</p>
+        <p class="upload-shortcuts" aria-label="快捷键提示">快捷键: Ctrl+U 选择文件, Ctrl+C 复制结果, ESC 取消上传</p>
+        <button class="button" id="selectButton" type="button" aria-describedby="upload-hint">选择文件</button>
+        <input type="file" id="fileInput" aria-label="选择要上传的文件" multiple>
 
-        <div id="uploadProgress">
-            <div class="progress-bar">
+        <div id="uploadProgress" aria-live="polite" aria-label="上传进度">
+            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div class="progress-bar-fill"></div>
             </div>
             <div class="status-text"></div>
+            <button class="button cancel-button" id="cancelButton" type="button" style="display: none">取消上传</button>
         </div>
 
-        <div id="uploadResult">
+        <div id="uploadResult" aria-live="polite">
             <h3>上传成功！</h3>
             <div id="resultContent"></div>
-            <button class="button copy-button" id="copyButton">复制信息</button>
+            <button class="button copy-button" id="copyButton" type="button" aria-label="复制文件链接和删除码">复制信息</button>
         </div>
-    </div>
+    </main>
 
-    <div class="shortcuts">
-        <h3>命令行快捷操作</h3>
-        <p>上传文件：<code id="uploadCommand">curl -T 文件名 {{.ServerHost}}</code></p>
-        <p>下载文件：<code id="downloadCommand">curl -O {{.Protocol}}://{{.ServerHost}}/xxxx/文件名</code></p>
-        <p>删除文件：<code id="deleteCommand">curl -X DELETE "{{.Protocol}}://{{.ServerHost}}/delete/xxxx/文件名?code=删除码"</code>
-        </p>
-    </div>
+    <section class="shortcuts" aria-labelledby="cli-title">
+        <h3 id="cli-title">命令行快捷操作</h3>
+        <div class="cli-commands">
+            <div class="cli-command">
+                <label for="uploadCommand">上传文件：</label>
+                <code id="uploadCommand" tabindex="0">curl -T 文件名 {{.ServerHost}}</code>
+            </div>
+            <div class="cli-command">
+                <label for="downloadCommand">下载文件：</label>
+                <code id="downloadCommand" tabindex="0">curl -O {{.Protocol}}://{{.ServerHost}}/xxxx/文件名</code>
+            </div>
+            <div class="cli-command">
+                <label for="deleteCommand">删除文件：</label>
+                <code id="deleteCommand" tabindex="0">curl -X DELETE "{{.Protocol}}://{{.ServerHost}}/delete/xxxx/文件名?code=删除码"</code>
+            </div>
+        </div>
+    </section>
 
-    <div class="file-list" id="fileList"></div>
+    <section class="file-list" id="fileList" aria-labelledby="files-title">
+        <!-- 文件列表动态生成 -->
+    </section>
 </div>
 
-<script>
-    // 全局变量和状态
-    const baseUrl = window.location.origin;
-    const APP_STATE = {
-        isUploading: false,
-        pendingDeletions: new Set()
-    };
-
-    // DOM 元素缓存
-    const DOM = {
-        dropZone: document.getElementById('dropZone'),
-        fileInput: document.getElementById('fileInput'),
-        selectButton: document.getElementById('selectButton'),
-        uploadProgress: document.getElementById('uploadProgress'),
-        progressBar: document.querySelector('.progress-bar-fill'),
-        statusText: document.querySelector('.status-text'),
-        uploadResult: document.getElementById('uploadResult'),
-        resultContent: document.getElementById('resultContent'),
-        fileList: document.getElementById('fileList'),
-        copyButton: document.getElementById('copyButton')
-    };
-
-    // 初始化
-    document.addEventListener('DOMContentLoaded', () => {
-        // initializeUI();
-        setupEventListeners();
-        setupXHRProgress();
-        loadFileList();
-    });
-
-    // 初始化 UI
-    // function initializeUI() {
-    //     document.getElementById('uploadCommand').textContent = `curl -T 文件名 ${window.location.host}`;
-    //     document.getElementById('downloadCommand').textContent = `curl -O ${baseUrl}/xxxx/文件名`;
-    //     document.getElementById('deleteCommand').textContent =
-    //         `curl -X DELETE "${baseUrl}/delete/xxxx/文件名?code=删除码"`;
-    // }
-
-    // 设置事件监听
-    function setupEventListeners() {
-        DOM.selectButton.addEventListener('click', () => DOM.fileInput.click());
-        DOM.fileInput.addEventListener('change', handleFileInputChange);
-        DOM.copyButton.addEventListener('click', copyResult);
-        setupDragAndDrop();
-    }
-
-    // 设置拖放处理
-    function setupDragAndDrop() {
-        DOM.dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            DOM.dropZone.classList.add('dragover');
-        });
-
-        DOM.dropZone.addEventListener('dragleave', () => {
-            DOM.dropZone.classList.remove('dragover');
-        });
-
-        DOM.dropZone.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            DOM.dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length > 0) {
-                await handleFile(e.dataTransfer.files[0]);
-            }
-        });
-    }
-
-    // 文件输入变化处理
-    async function handleFileInputChange(e) {
-        if (e.target.files.length > 0) {
-            await handleFile(e.target.files[0]);
-            e.target.value = '';
-        }
-    }
-
-    // XHR 进度监听设置
-    function setupXHRProgress() {
-        const originalXHR = window.XMLHttpRequest;
-        window.XMLHttpRequest = function () {
-            const xhr = new originalXHR();
-            xhr.upload.addEventListener('progress', handleUploadProgress);
-            return xhr;
-        };
-    }
-
-    // 上传进度处理
-    function handleUploadProgress(e) {
-        if (e.lengthComputable) {
-            const percent = (e.loaded / e.total) * 100;
-            requestAnimationFrame(() => {
-                DOM.progressBar.style.width = percent + '%';
-                DOM.statusText.textContent = `已上传 ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
-            });
-        }
-    }
-
-    // 文件处理
-    async function handleFile(file) {
-        if (APP_STATE.isUploading) return;
-        APP_STATE.isUploading = true;
-
-        try {
-            showUploadProgress();
-            await uploadFile(file);
-        } catch (error) {
-            console.error('上传失败:', error);
-            showToast('上传失败: ' + error.message);
-        } finally {
-            APP_STATE.isUploading = false;
-            hideUploadProgress();
-        }
-    }
-
-    // 显示上传进度
-    function showUploadProgress() {
-        DOM.uploadProgress.style.display = 'block';
-        DOM.progressBar.style.width = '0%';
-        DOM.uploadResult.style.display = 'none';
-        DOM.statusText.textContent = '准备上传...';
-    }
-
-    // 隐藏上传进度
-    function hideUploadProgress() {
-        DOM.uploadProgress.style.display = 'none';
-    }
-
-    // 文件上传
-    async function uploadFile(file) {
-        const encodedFilename = encodeURIComponent(file.name);
-        const response = await fetch(`/${encodedFilename}`, {
-            method: 'PUT',
-            body: file,
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`上传失败: ${response.status}`);
-        }
-
-        const result = await response.json();
-        await handleUploadSuccess(result, file);
-    }
-
-    // 处理上传成功
-    async function handleUploadSuccess(result, file) {
-        const fileInfo = {
-            path: result.path,
-            filename: result.filename,
-            fileSize: file.size,
-            uploadTime: new Date().toISOString()
-        };
-
-        saveFileInfo(fileInfo, result.deleteCode);
-        showUploadResult(result);
-        await loadFileList();
-    }
-
-    // 保存文件信息
-    function saveFileInfo(fileInfo, deleteCode) {
-        localStorage.setItem(
-            `fileInfo_/${fileInfo.path}/${fileInfo.filename}`,
-            JSON.stringify(fileInfo)
-        );
-        if (deleteCode) {
-            localStorage.setItem(
-                `deleteCode_/${fileInfo.path}/${fileInfo.filename}`,
-                deleteCode
-            );
-        }
-    }
-
-    // 显示上传结果
-    function showUploadResult(result) {
-        DOM.uploadResult.style.display = 'block';
-        const encodedUrl = `${baseUrl}/${result.path}/${encodeURIComponent(result.filename)}`;
-        const displayUrl = `${baseUrl}/${result.path}/${result.filename}`; // 显示用的URL，使用原始文件名
-        DOM.resultContent.innerHTML = `
-        <p>文件链接: <a href="${encodedUrl}" data-url="${encodedUrl}" target="_blank">${displayUrl}</a></p>
-        <p>删除码: ${result.deleteCode}</p>
-    `;
-    }
-
-    // 创建确认对话框
-    function createConfirmDialog(message) {
-        return new Promise((resolve) => {
-            const dialog = document.createElement('div');
-            dialog.className = 'confirm-dialog';
-            dialog.innerHTML = `
-            <div class="confirm-dialog-content">
-                <p>${message}</p>
-                <div class="confirm-dialog-buttons">
-                    <button class="confirm-yes">确定</button>
-                    <button class="confirm-no">取消</button>
-                </div>
-            </div>
-        `;
-
-            document.body.appendChild(dialog);
-            requestAnimationFrame(() => {
-                dialog.style.opacity = '1';
-                dialog.classList.add('active');
-            });
-
-            function closeDialog(result) {
-                dialog.style.opacity = '0';
-                dialog.classList.remove('active');
-                setTimeout(() => {
-                    dialog.remove();
-                    resolve(result);
-                }, 200);
-            }
-
-            dialog.querySelector('.confirm-yes').onclick = () => closeDialog(true);
-            dialog.querySelector('.confirm-no').onclick = () => closeDialog(false);
-        });
-    }
-
-    // 创建文件列表项
-    function createFileListItem(file) {
-        const div = document.createElement('div');
-        div.className = 'file-item';
-
-        const uploadDate = new Date(file.uploadTime).toLocaleString();
-        const encodedFilename = encodeURIComponent(file.filename);
-
-        const fileInfo = document.createElement('div');
-        fileInfo.className = 'file-info';
-        fileInfo.innerHTML = `
-        <div class="file-name">${file.filename}</div>
-        <div class="file-meta">
-            <span class="file-size">${formatFileSize(file.fileSize)}</span>
-            <span class="upload-time">${uploadDate}</span>
-        </div>
-    `;
-
-        const fileActions = document.createElement('div');
-        fileActions.className = 'file-actions';
-
-        const downloadLink = document.createElement('a');
-        downloadLink.href = `/${file.path}/${encodedFilename}`;
-        downloadLink.className = 'button';
-        downloadLink.setAttribute('download', file.filename);
-        downloadLink.textContent = '下载';
-        fileActions.appendChild(downloadLink);
-
-        if (file.deleteCode) {
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'button delete-button';
-            deleteButton.textContent = '删除';
-            deleteButton.onclick = (e) => handleDelete(e, file);
-            fileActions.appendChild(deleteButton);
-        }
-
-        div.appendChild(fileInfo);
-        div.appendChild(fileActions);
-        return div;
-    }
-
-    // 处理删除操作
-    async function handleDelete(event, file) {
-        event.preventDefault();
-        const button = event.target;
-        const fileItem = button.closest('.file-item');
-
-        if (button.disabled || APP_STATE.pendingDeletions.has(fileItem)) {
-            return;
-        }
-
-        const confirmed = await createConfirmDialog('确定要删除这个文件吗？');
-        if (!confirmed) return;
-
-        button.disabled = true;
-        const originalText = button.textContent;
-        button.textContent = '删除中...';
-        APP_STATE.pendingDeletions.add(fileItem);
-
-        try {
-            await performDelete(file, fileItem);
-            showToast('文件已删除');
-        } catch (error) {
-            console.error('删除失败:', error);
-            showToast('删除失败: ' + error.message);
-            button.disabled = false;
-            button.textContent = originalText;
-        } finally {
-            APP_STATE.pendingDeletions.delete(fileItem);
-        }
-    }
-
-    // 执行删除
-    async function performDelete(file, fileItem) {
-        const encodedFilename = encodeURIComponent(file.filename);
-        const encodedOriginalFilename = encodeURIComponent(file.originalFilename);
-        const encodedDeleteCode = encodeURIComponent(file.deleteCode);
-
-        console.log('Debug info:', {
-            filename: file.filename,
-            originalFilename: file.originalFilename,
-            encodedFilename: encodedFilename,
-            encodedOriginalFilename: encodedOriginalFilename,
-            deleteCode: file.deleteCode,
-            encodedDeleteCode: encodedDeleteCode
-        });
-
-        await fetch(
-            `/delete/${file.path}/${encodedFilename}?code=${encodedDeleteCode}&original=${encodedOriginalFilename}`,
-            {method: 'DELETE'}
-        );
-
-        await animateAndRemove(fileItem, file);
-    }
-
-    // 动画移除元素
-    function animateAndRemove(element, file) {
-        return new Promise(resolve => {
-            element.classList.add('deleting');
-            element.style.height = element.offsetHeight + 'px';
-
-            requestAnimationFrame(() => {
-                element.style.height = '0';
-                element.style.margin = '0';
-                element.style.padding = '0';
-                element.style.opacity = '0';
-            });
-
-            setTimeout(() => {
-                element.remove();
-                localStorage.removeItem(`deleteCode_/${file.path}/${file.filename}`);
-                localStorage.removeItem(`fileInfo_/${file.path}/${file.filename}`);
-
-                // 清除上传结果区域
-                DOM.uploadResult.style.display = 'none';
-                DOM.resultContent.innerHTML = '';
-
-                checkEmptyFileList();
-                resolve();
-            }, 300);
-        });
-    }
-
-    // 加载文件列表
-    async function loadFileList() {
-        DOM.fileList.innerHTML = '';
-        const files = getStoredFiles();
-
-        if (files.length === 0) return;
-
-        const title = document.createElement('h3');
-        title.textContent = '已上传的文件';
-        title.style.marginBottom = '15px';
-        DOM.fileList.appendChild(title);
-
-        const fragment = document.createDocumentFragment();
-        files.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime))
-            .forEach(file => {
-                fragment.appendChild(createFileListItem(file));
-            });
-
-        DOM.fileList.appendChild(fragment);
-    }
-
-    // 获取存储的文件
-    function getStoredFiles() {
-        const files = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key.startsWith('fileInfo_/')) {
-                try {
-                    const fileInfo = JSON.parse(localStorage.getItem(key));
-                    const deleteCode = localStorage.getItem(`deleteCode_/${fileInfo.path}/${fileInfo.filename}`);
-                    if (fileInfo && fileInfo.path && fileInfo.filename) {
-                        files.push({...fileInfo, deleteCode});
-                    }
-                } catch (error) {
-                    console.error('Error parsing file info:', error);
-                    // 清理无效的存储项
-                    localStorage.removeItem(key);
-                }
-            }
-        }
-        return files;
-    }
-
-    // 复制结果
-    async function copyResult() {
-        try {
-            const link = DOM.resultContent.querySelector('a');
-            const displayUrl = link.textContent;
-            const deleteCode = DOM.resultContent.textContent.match(/删除码: (.+)/)?.[1] || '';
-
-            // 组织复制内容，使用原始文件名的URL
-            const copyText = `文件链接: ${displayUrl}\n删除码: ${deleteCode}`;
-
-            await navigator.clipboard.writeText(copyText);
-            showToast('复制成功！');
-        } catch (err) {
-            console.error('复制失败:', err);
-            showToast('复制失败');
-        }
-    }
-
-    // 显示 Toast 消息
-    function showToast(message, duration = 2000) {
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.textContent = message;
-
-        document.body.appendChild(toast);
-        requestAnimationFrame(() => {
-            toast.style.opacity = '1';
-        });
-
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => {
-                if (document.body.contains(toast)) {
-                    document.body.removeChild(toast);
-                }
-            }, 300);
-        }, duration);
-    }
-
-    // 检查空文件列表
-    function checkEmptyFileList() {
-        const remainingFiles = DOM.fileList.querySelectorAll('.file-item');
-        if (remainingFiles.length === 0) {
-            const title = DOM.fileList.querySelector('h3');
-            if (title) {
-                title.style.transition = 'opacity 0.3s ease';
-                title.style.opacity = '0';
-                setTimeout(() => {
-                    if (DOM.fileList.contains(title)) {
-                        title.remove();
-                    }
-                }, 300);
-            }
-        }
-    }
-
-    // 格式化文件大小
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 B';
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-</script>
+<script src="static/app.js"></script>
+<noscript>
+    <div class="noscript-message">
+        <h2>需要启用 JavaScript</h2>
+        <p>此页面需要启用 JavaScript 才能正常工作。请在浏览器设置中启用 JavaScript 后刷新页面。</p>
+        <p>您也可以使用命令行工具进行文件上传：</p>
+        <code>curl -T 文件名 {{.ServerHost}}</code>
+    </div>
+</noscript>
 </body>
 </html>

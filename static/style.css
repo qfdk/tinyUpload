@@ -1,26 +1,44 @@
 :root {
     --primary-color: #2196F3;
     --primary-dark: #1976D2;
+    --primary-light: #E3F2FD;
     --danger-color: #dc3545;
     --danger-dark: #c82333;
     --success-color: #4caf50;
     --success-dark: #388e3c;
+    --warning-color: #ff9800;
+    --warning-dark: #f57c00;
+    --text-primary: #333;
+    --text-secondary: #666;
+    --text-muted: #999;
+    --border-color: #e0e0e0;
+    --shadow-light: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-medium: 0 4px 8px rgba(0, 0, 0, 0.15);
+    --border-radius: 8px;
+    --border-radius-small: 4px;
+    --transition: all 0.3s ease;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 20px;
-    background-color: #f5f5f5;
-    color: #333;
+    background-color: #f5f7fa;
+    color: var(--text-primary);
+    line-height: 1.6;
 }
 
 .container {
     background-color: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-light);
+    position: relative;
 }
 
 .site-header {
@@ -51,7 +69,21 @@ body {
 
 .upload-area.dragover {
     border-color: var(--primary-color);
-    background-color: #E3F2FD;
+    background-color: var(--primary-light);
+    transform: scale(1.02);
+}
+
+.upload-hint {
+    margin: 10px 0;
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
+.upload-shortcuts {
+    margin: 5px 0 15px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 .upload-icon {
@@ -92,6 +124,26 @@ body {
     background-color: var(--success-dark);
 }
 
+.cancel-button {
+    background-color: var(--warning-color);
+    margin-top: 10px;
+}
+
+.cancel-button:hover {
+    background-color: var(--warning-dark);
+}
+
+.button:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 #uploadProgress {
     margin-top: 15px;
     display: none;
@@ -126,18 +178,52 @@ body {
 }
 
 .shortcuts {
-    margin: 20px 0;
-    padding: 15px;
+    margin: 30px 0;
+    padding: 20px;
     background-color: #f8f9fa;
-    border-radius: 4px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+
+.cli-commands {
+    display: grid;
+    gap: 12px;
+}
+
+.cli-command {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.cli-command label {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
 }
 
 .shortcuts code {
     background-color: #e9ecef;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-family: monospace;
+    padding: 8px 12px;
+    border-radius: var(--border-radius-small);
+    font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', monospace;
+    font-size: 13px;
     word-break: break-all;
+    border: 1px solid #dee2e6;
+    cursor: pointer;
+    transition: var(--transition);
+    line-height: 1.4;
+}
+
+.shortcuts code:hover,
+.shortcuts code:focus {
+    background-color: #dee2e6;
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+.shortcuts code:focus {
+    box-shadow: 0 0 0 2px var(--primary-light);
 }
 
 .file-list {
@@ -342,4 +428,151 @@ body {
 .file-item.deleting {
     opacity: 0;
     transform: translateX(20px);
+}
+
+/* 无障碍访问支持 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* 键盘导航支持 */
+*:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+button:focus,
+a:focus,
+input:focus {
+    outline-color: var(--primary-color);
+}
+
+/* 无脚本支持 */
+.noscript-message {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: var(--border-radius);
+    padding: 20px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.noscript-message h2 {
+    color: #856404;
+    margin-top: 0;
+}
+
+.noscript-message code {
+    background-color: #f8f9fa;
+    padding: 4px 8px;
+    border-radius: var(--border-radius-small);
+    font-family: monospace;
+}
+
+/* 改进的文件输入样式 */
+#fileInput {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* 加载状态 */
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid transparent;
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+    :root {
+        --border-color: #000;
+        --text-secondary: #000;
+    }
+    
+    .button {
+        border: 2px solid currentColor;
+    }
+}
+
+/* 减少动画模式支持 */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* 深色模式支持 */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --text-primary: #e0e0e0;
+        --text-secondary: #b0b0b0;
+        --text-muted: #888;
+        --border-color: #444;
+    }
+    
+    body {
+        background-color: #1a1a1a;
+        color: var(--text-primary);
+    }
+    
+    .container {
+        background-color: #2d2d2d;
+        border: 1px solid var(--border-color);
+    }
+    
+    .upload-area {
+        background-color: #333;
+        border-color: var(--border-color);
+    }
+    
+    .shortcuts {
+        background-color: #333;
+        border-color: var(--border-color);
+    }
+    
+    .shortcuts code {
+        background-color: #444;
+        border-color: var(--border-color);
+        color: var(--text-primary);
+    }
+    
+    .file-item {
+        background-color: #333;
+        border-color: var(--border-color);
+    }
 }
