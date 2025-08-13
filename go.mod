@@ -3,7 +3,7 @@ module tinyUpload
 go 1.22
 
 require (
-	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/fiber/v2 v2.52.9
 	github.com/mattn/go-sqlite3 v1.14.24
 )
 

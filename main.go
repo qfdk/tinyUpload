@@ -153,6 +153,12 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 		}
 	}
 
+	// 清理文件名以防止路径遍历攻击
+	decodedFilename = sanitizeFilename(decodedFilename)
+	if decodedFilename == "" {
+		return c.Status(400).SendString("Invalid filename after sanitization")
+	}
+
 	path := generateRandomPath()
 	dirPath := filepath.Join(s.uploadDir, path)
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
@@ -231,6 +237,12 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 		return c.Status(404).SendString(`File not found`)
 	}
 
+	// 清理文件名以防止路径遍历攻击
+	decodedRequestFilename = sanitizeFilename(decodedRequestFilename)
+	if decodedRequestFilename == "" {
+		return c.Status(404).SendString("File not found")
+	}
+
 	encodedRequestFilename := url.QueryEscape(decodedRequestFilename)
 
 	var originalFilename string
@@ -261,6 +273,12 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 
 	decodedFilename, err := url.QueryUnescape(requestFilename)
 	if err != nil {
+		return c.Status(404).SendString("File not found")
+	}
+
+	// 清理文件名以防止路径遍历攻击
+	decodedFilename = sanitizeFilename(decodedFilename)
+	if decodedFilename == "" {
 		return c.Status(404).SendString("File not found")
 	}
 
@@ -338,6 +356,47 @@ func (s *FileServer) cleanupExpiredFiles() error {
 	}
 
 	return nil
+}
+
+func sanitizeFilename(filename string) string {
+	if filename == "" {
+		return ""
+	}
+	
+	// 使用 filepath.Base 移除任何路径组件，防止路径遍历
+	filename = filepath.Base(filename)
+	
+	// 移除危险的字符序列
+	filename = strings.ReplaceAll(filename, "..", "")
+	filename = strings.ReplaceAll(filename, "~", "")
+	
+	// 移除控制字符和不可见字符
+	var sanitized strings.Builder
+	for _, r := range filename {
+		if r < 32 || r == 127 {
+			continue // 跳过控制字符
+		}
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			continue // 跳过文件系统不安全字符
+		}
+		sanitized.WriteRune(r)
+	}
+	
+	result := strings.TrimSpace(sanitized.String())
+	
+	// 确保文件名不为空且不是特殊名称
+	if result == "" || result == "." || result == ".." {
+		return "unnamed_file"
+	}
+	
+	// 限制文件名长度
+	if len(result) > 255 {
+		ext := filepath.Ext(result)
+		base := result[:255-len(ext)]
+		result = base + ext
+	}
+	
+	return result
 }
 
 func generateRandomString(length int) string {
