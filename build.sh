@@ -5,6 +5,12 @@ set -e
 echo "Pulling latest code..."
 git pull origin main
 
+# 确保数据目录存在且权限正确
+echo "Preparing data directory..."
+sudo mkdir -p /data/tinyUpload/uploads
+sudo chown -R 1000:1000 /data/tinyUpload
+sudo chmod -R 755 /data/tinyUpload
+
 # 备份运行中的镜像
 echo "Backing up current image..."
 docker tag tiny-upload:latest tiny-upload:rollback 2>/dev/null || true
