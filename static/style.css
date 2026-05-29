@@ -168,13 +168,59 @@ body {
     font-size: 14px;
 }
 
-#uploadResult {
-    display: none;
-    margin-top: 20px;
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 4px;
+.upload-result {
+    position: relative;
+    margin: 20px 0;
+    padding: 20px 40px 20px 20px;
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     word-break: break-all;
+}
+
+.upload-result[hidden] {
+    display: none;
+}
+
+.upload-result h3 {
+    margin: 0 0 12px;
+    color: var(--success-color);
+    font-size: 18px;
+}
+
+.result-close {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.result-close:hover {
+    color: var(--text-primary);
+    background-color: #f0f0f0;
+}
+
+.result-item {
+    padding: 10px 0;
+    border-top: 1px solid #eee;
+}
+
+.result-item:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+.result-filename {
+    font-weight: 600;
+    margin: 0 0 6px;
 }
 
 .shortcuts {
@@ -333,7 +379,7 @@ body {
         padding: 8px 0;
     }
 
-    #uploadResult {
+    .upload-result {
         word-break: break-all;
     }
     .shortcuts {

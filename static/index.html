@@ -21,7 +21,7 @@
     <main class="upload-area" id="dropZone" role="main" aria-label="文件上传区域">
         <div class="upload-icon" aria-hidden="true">📦</div>
         <p class="upload-hint">拖拽文件到此处或点击选择文件</p>
-        <p class="upload-shortcuts" aria-label="快捷键提示">快捷键: Ctrl+U 选择文件, Ctrl+C 复制结果, ESC 取消上传</p>
+        <p class="upload-shortcuts" id="uploadShortcuts" aria-label="快捷键提示">快捷键: Ctrl+U 选择文件, Ctrl+C 复制结果, ESC 取消上传</p>
         <button class="button" id="selectButton" type="button" aria-describedby="upload-hint">选择文件</button>
         <input type="file" id="fileInput" aria-label="选择要上传的文件" multiple>
 
@@ -32,15 +32,16 @@
             <div class="status-text"></div>
             <button class="button cancel-button" id="cancelButton" type="button" style="display: none">取消上传</button>
         </div>
-
-        <div id="uploadResult" aria-live="polite">
-            <h3>上传成功！</h3>
-            <div id="resultContent"></div>
-            <button class="button copy-button" id="copyButton" type="button" aria-label="复制文件链接和删除码">复制信息</button>
-        </div>
     </main>
 
-    <section class="shortcuts" aria-labelledby="cli-title">
+    <section class="upload-result" id="uploadResult" aria-live="polite" hidden>
+        <button class="result-close" id="resultClose" type="button" aria-label="关闭">×</button>
+        <h3>上传成功！</h3>
+        <div id="resultContent"></div>
+        <button class="button copy-button" id="copyButton" type="button" aria-label="复制文件链接和删除码">复制信息</button>
+    </section>
+
+    <section class="shortcuts" id="cliShortcuts" aria-labelledby="cli-title">
         <h3 id="cli-title">命令行快捷操作</h3>
         <div class="cli-commands">
             <div class="cli-command">

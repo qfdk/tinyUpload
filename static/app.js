@@ -9,7 +9,8 @@ class TinyUpload {
         this.state = {
             isUploading: false,
             pendingDeletions: new Set(),
-            uploadController: null
+            uploadController: null,
+            currentResults: []
         };
         
         this.dom = this.initDOM();
@@ -29,8 +30,11 @@ class TinyUpload {
             statusText: document.querySelector('.status-text'),
             uploadResult: document.getElementById('uploadResult'),
             resultContent: document.getElementById('resultContent'),
+            resultClose: document.getElementById('resultClose'),
             fileList: document.getElementById('fileList'),
-            copyButton: document.getElementById('copyButton')
+            copyButton: document.getElementById('copyButton'),
+            uploadShortcuts: document.getElementById('uploadShortcuts'),
+            cliShortcuts: document.getElementById('cliShortcuts')
         };
     }
 
@@ -47,6 +51,9 @@ class TinyUpload {
         
         // 复制功能
         this.dom.copyButton.addEventListener('click', () => this.copyResult());
+
+        // 关闭结果卡片
+        this.dom.resultClose.addEventListener('click', () => this.ui.hideUploadResult());
         
         // 拖放
         this.setupDragAndDrop();
@@ -61,7 +68,7 @@ class TinyUpload {
                         this.dom.fileInput.click();
                         break;
                     case 'c':
-                        if (this.dom.uploadResult.style.display === 'block') {
+                        if (!this.dom.uploadResult.hidden) {
                             e.preventDefault();
                             this.copyResult();
                         }
@@ -151,9 +158,33 @@ class TinyUpload {
     }
 
     async handleFile(file) {
+        const result = await this.uploadAndStore(file);
+        if (result) {
+            this.state.currentResults = [result];
+            this.ui.showUploadResult([result], this.baseUrl);
+            await this.loadFileList();
+        }
+    }
+
+    async handleMultipleFiles(files) {
+        const results = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            this.ui.showToast(`上传中 ${i + 1}/${files.length}: ${file.name}`);
+            const r = await this.uploadAndStore(file);
+            if (r) results.push(r);
+        }
+        if (results.length > 0) {
+            this.state.currentResults = results;
+            this.ui.showUploadResult(results, this.baseUrl);
+            await this.loadFileList();
+        }
+    }
+
+    async uploadAndStore(file) {
         if (this.state.isUploading) {
             this.ui.showToast('正在上传中，请稍候...');
-            return;
+            return null;
         }
 
         this.state.isUploading = true;
@@ -162,31 +193,24 @@ class TinyUpload {
         try {
             this.ui.showUploadProgress();
             const result = await this.uploadFile(file);
-            await this.handleUploadSuccess(result, file);
+            const fileInfo = {
+                path: result.path,
+                filename: result.filename,
+                fileSize: file.size,
+                uploadTime: new Date().toISOString()
+            };
+            this.storage.saveFileInfo(fileInfo, result.deleteCode);
+            return { ...result, fileSize: file.size };
         } catch (error) {
             if (error.name !== 'AbortError') {
                 console.error('上传失败:', error);
                 this.ui.showToast('上传失败: ' + error.message);
             }
+            return null;
         } finally {
             this.state.isUploading = false;
             this.state.uploadController = null;
             this.ui.hideUploadProgress();
-        }
-    }
-
-    async handleMultipleFiles(files) {
-        this.ui.showToast(`准备上传 ${files.length} 个文件...`);
-        
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            this.ui.showToast(`上传进度: ${i + 1}/${files.length} - ${file.name}`);
-            await this.handleFile(file);
-            
-            // 给用户一点时间看到结果
-            if (i < files.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
         }
     }
 
@@ -244,24 +268,16 @@ class TinyUpload {
         }
     }
 
-    async handleUploadSuccess(result, file) {
-        const fileInfo = {
-            path: result.path,
-            filename: result.filename,
-            fileSize: file.size,
-            uploadTime: new Date().toISOString()
-        };
-
-        this.storage.saveFileInfo(fileInfo, result.deleteCode);
-        this.ui.showUploadResult(result, this.baseUrl);
-        await this.loadFileList();
-    }
-
     async loadFileList() {
         this.dom.fileList.innerHTML = '';
         const files = this.storage.getStoredFiles();
+        const hasFiles = files.length > 0;
 
-        if (files.length === 0) return;
+        // 已上传文件列表与快捷键提示/CLI 命令互斥
+        this.dom.uploadShortcuts.hidden = hasFiles;
+        this.dom.cliShortcuts.hidden = hasFiles;
+
+        if (!hasFiles) return;
 
         const title = document.createElement('h3');
         title.textContent = '已上传的文件';
@@ -294,11 +310,13 @@ class TinyUpload {
 
     async performDelete(file) {
         const encodedFilename = encodeURIComponent(file.filename);
-        const encodedDeleteCode = encodeURIComponent(file.deleteCode);
 
         const response = await fetch(
-            `/delete/${file.path}/${encodedFilename}?code=${encodedDeleteCode}`,
-            { method: 'DELETE' }
+            `/delete/${file.path}/${encodedFilename}`,
+            {
+                method: 'DELETE',
+                headers: { 'X-Delete-Code': file.deleteCode }
+            }
         );
 
         if (!response.ok && response.status !== 404 && response.status !== 403) {
@@ -309,13 +327,16 @@ class TinyUpload {
     }
 
     async copyResult() {
-        try {
-            const link = this.dom.resultContent.querySelector('a');
-            const displayUrl = link.textContent;
-            const deleteCode = this.dom.resultContent.textContent.match(/删除码: (.+)/)?.[1] || '';
+        const results = this.state.currentResults;
+        if (!results || results.length === 0) return;
 
-            const copyText = `文件链接: ${displayUrl}\n删除码: ${deleteCode}`;
-            await navigator.clipboard.writeText(copyText);
+        try {
+            const text = results.map(r => {
+                const url = `${this.baseUrl}/${r.path}/${encodeURIComponent(r.filename)}`;
+                return `文件链接: ${url}\n删除码: ${r.deleteCode}`;
+            }).join('\n\n');
+
+            await navigator.clipboard.writeText(text);
             this.ui.showToast('复制成功！');
         } catch (err) {
             console.error('复制失败:', err);
@@ -329,13 +350,9 @@ class StorageManager {
     saveFileInfo(fileInfo, deleteCode) {
         const key = `fileInfo_/${fileInfo.path}/${fileInfo.filename}`;
         try {
-            localStorage.setItem(key, JSON.stringify(fileInfo));
-            if (deleteCode) {
-                localStorage.setItem(
-                    `deleteCode_/${fileInfo.path}/${fileInfo.filename}`,
-                    deleteCode
-                );
-            }
+            localStorage.setItem(key, JSON.stringify({ ...fileInfo, deleteCode }));
+            // 清理旧版分离存储的删除码（如有）
+            localStorage.removeItem(`deleteCode_/${fileInfo.path}/${fileInfo.filename}`);
         } catch (error) {
             console.error('保存文件信息失败:', error);
         }
@@ -346,17 +363,18 @@ class StorageManager {
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                if (key && key.startsWith('fileInfo_/')) {
-                    try {
-                        const fileInfo = JSON.parse(localStorage.getItem(key));
-                        const deleteCode = localStorage.getItem(`deleteCode_/${fileInfo.path}/${fileInfo.filename}`);
-                        if (fileInfo && fileInfo.path && fileInfo.filename) {
-                            files.push({ ...fileInfo, deleteCode });
-                        }
-                    } catch (error) {
-                        console.error('解析文件信息失败:', error);
-                        localStorage.removeItem(key);
-                    }
+                if (!key || !key.startsWith('fileInfo_/')) continue;
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    if (!data || !data.path || !data.filename) continue;
+                    // 兼容旧数据：deleteCode 曾经分离存储
+                    const deleteCode = data.deleteCode
+                        || localStorage.getItem(`deleteCode_/${data.path}/${data.filename}`)
+                        || '';
+                    files.push({ ...data, deleteCode });
+                } catch (error) {
+                    console.error('解析文件信息失败:', error);
+                    localStorage.removeItem(key);
                 }
             }
         } catch (error) {
@@ -384,12 +402,15 @@ class UIManager {
     showUploadProgress() {
         this.dom.uploadProgress.style.display = 'block';
         this.dom.progressBar.style.width = '0%';
-        this.dom.uploadResult.style.display = 'none';
         this.dom.statusText.textContent = '准备上传...';
     }
 
     hideUploadProgress() {
         this.dom.uploadProgress.style.display = 'none';
+    }
+
+    hideUploadResult() {
+        this.dom.uploadResult.hidden = true;
     }
 
     updateProgress(percent, loaded, total) {
@@ -399,15 +420,24 @@ class UIManager {
         });
     }
 
-    showUploadResult(result, baseUrl) {
-        this.dom.uploadResult.style.display = 'block';
-        const encodedUrl = `${baseUrl}/${result.path}/${encodeURIComponent(result.filename)}`;
-        const displayUrl = `${baseUrl}/${result.path}/${this.escapeHtml(result.filename)}`;
-        
-        this.dom.resultContent.innerHTML = `
-            <p>文件链接: <a href="${encodedUrl}" target="_blank" rel="noopener">${displayUrl}</a></p>
-            <p>删除码: <span class="delete-code">${this.escapeHtml(result.deleteCode)}</span></p>
-        `;
+    showUploadResult(results, baseUrl) {
+        const items = results.map(r => {
+            const encodedUrl = `${baseUrl}/${r.path}/${encodeURIComponent(r.filename)}`;
+            const displayUrl = `${baseUrl}/${r.path}/${this.escapeHtml(r.filename)}`;
+            const filenameLine = results.length > 1
+                ? `<p class="result-filename">${this.escapeHtml(r.filename)}</p>`
+                : '';
+            return `
+                <div class="result-item">
+                    ${filenameLine}
+                    <p>文件链接: <a href="${encodedUrl}" target="_blank" rel="noopener">${displayUrl}</a></p>
+                    <p>删除码: <span class="delete-code">${this.escapeHtml(r.deleteCode)}</span></p>
+                </div>
+            `;
+        }).join('');
+
+        this.dom.resultContent.innerHTML = items;
+        this.dom.uploadResult.hidden = false;
     }
 
     createFileListItem(file, onDelete) {

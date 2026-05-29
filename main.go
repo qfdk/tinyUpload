@@ -269,7 +269,6 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 	path := c.Params("path")
 	requestFilename := c.Params("filename")
-	encodedDeleteCode := c.Query("code")
 
 	decodedFilename, err := url.QueryUnescape(requestFilename)
 	if err != nil {
@@ -284,9 +283,13 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 
 	encodedFilename := url.QueryEscape(decodedFilename)
 
-	decodedDeleteCode, err := url.QueryUnescape(encodedDeleteCode)
-	if err != nil {
-		return c.Status(400).SendString("Invalid delete code")
+	// 优先从 header 读取删除码（避免出现在访问日志/历史）；保留 query 兼容命令行
+	decodedDeleteCode := c.Get("X-Delete-Code")
+	if decodedDeleteCode == "" {
+		decodedDeleteCode, err = url.QueryUnescape(c.Query("code"))
+		if err != nil {
+			return c.Status(400).SendString("Invalid delete code")
+		}
 	}
 
 	var filename string
