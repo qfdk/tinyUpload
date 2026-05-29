@@ -282,9 +282,9 @@ class TinyUpload {
         if (!confirmed) return;
 
         try {
-            await this.performDelete(file);
+            const status = await this.performDelete(file);
             this.storage.removeFileInfo(file);
-            this.ui.showToast('文件已删除');
+            this.ui.showToast(status === 200 ? '文件已删除' : '文件已不可用，已从列表移除');
             await this.loadFileList();
         } catch (error) {
             console.error('删除失败:', error);
@@ -301,9 +301,11 @@ class TinyUpload {
             { method: 'DELETE' }
         );
 
-        if (!response.ok) {
+        if (!response.ok && response.status !== 404 && response.status !== 403) {
             throw new Error(`删除失败: ${response.status}`);
         }
+
+        return response.status;
     }
 
     async copyResult() {
