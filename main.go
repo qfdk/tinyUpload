@@ -4,10 +4,10 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"mime"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,7 +16,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -61,7 +60,8 @@ func NewFileServer() (*FileServer, error) {
 	app := fiber.New(fiber.Config{
 		Prefork:                 false,
 		ServerHeader:            "FileServer",
-		BodyLimit:               1024 * 1024 * 1024,
+		BodyLimit:               512 * 1024 * 1024,
+		StreamRequestBody:       true,
 		ReadTimeout:             30 * time.Second,
 		WriteTimeout:            30 * time.Second,
 		IdleTimeout:             60 * time.Second,
@@ -83,7 +83,8 @@ func NewFileServer() (*FileServer, error) {
 	app.Use(compress.New(compress.Config{
 		Level: compress.LevelBestSpeed,
 	}))
-	app.Use(cors.New())
+	// 不启用 CORS：前端与 API 同源，CLI（curl/wget）不受同源策略约束。
+	// 移除通配 CORS，避免任意第三方站点跨源调用上传/删除接口。
 
 	return &FileServer{
 		db:        db,
@@ -169,21 +170,30 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	log.Printf("Saving to DB - path: %s, filename: %s, encoded: %s", path, decodedFilename, encodedFilename)
 
 	filePath := filepath.Join(dirPath, decodedFilename)
-	fileContent := c.Body()
-	if len(fileContent) == 0 {
-		return c.Status(400).SendString("Empty file content")
-	}
-
-	if err := os.WriteFile(filePath, fileContent, 0644); err != nil {
+	out, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
 		return c.Status(500).SendString("Failed to save file")
 	}
 
-	fileSize := int64(len(fileContent))
+	// 流式写盘，避免将整个请求体读入内存（大文件并发会导致 OOM）
+	fileSize, copyErr := io.Copy(out, c.Context().RequestBodyStream())
+	if cerr := out.Close(); cerr != nil && copyErr == nil {
+		copyErr = cerr
+	}
+	if copyErr != nil {
+		os.Remove(filePath)
+		return c.Status(500).SendString("Failed to save file")
+	}
+	if fileSize == 0 {
+		os.Remove(filePath)
+		return c.Status(400).SendString("Empty file content")
+	}
+
 	mimeType := c.Get("Content-Type")
 	if mimeType == "" {
 		mimeType = mime.TypeByExtension(filepath.Ext(decodedFilename))
 		if mimeType == "" {
-			mimeType = http.DetectContentType(fileContent)
+			mimeType = "application/octet-stream"
 		}
 	}
 
@@ -262,6 +272,13 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 	if err != nil {
 		log.Printf("Error updating download count: %v", err)
 	}
+
+	// 防止上传内容被浏览器当作页面在同源内联执行（存储型 XSS）：
+	// 强制下载（attachment）+ 禁止 MIME 嗅探 + CSP 沙箱兜底
+	encodedName := strings.ReplaceAll(url.QueryEscape(originalFilename), "+", "%20")
+	c.Set("Content-Disposition", "attachment; filename*=UTF-8''"+encodedName)
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 
 	return c.SendFile(filePath)
 }
@@ -392,11 +409,21 @@ func sanitizeFilename(filename string) string {
 		return "unnamed_file"
 	}
 	
-	// 限制文件名长度
+	// 限制文件名长度（按 rune 边界截断，避免切断多字节 UTF-8 序列）
 	if len(result) > 255 {
 		ext := filepath.Ext(result)
-		base := result[:255-len(ext)]
-		result = base + ext
+		if len(ext) > 255 {
+			ext = ""
+		}
+		limit := 255 - len(ext)
+		var b strings.Builder
+		for _, r := range result[:len(result)-len(ext)] {
+			if b.Len()+len(string(r)) > limit {
+				break
+			}
+			b.WriteRune(r)
+		}
+		result = b.String() + ext
 	}
 	
 	return result
@@ -413,7 +440,7 @@ func generateRandomString(length int) string {
 }
 
 func generateRandomPath() string {
-	return generateRandomString(4)
+	return generateRandomString(8)
 }
 
 func isTextPreferred(c *fiber.Ctx) bool {
