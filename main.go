@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"math/big"
@@ -20,6 +21,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// maxUploadSize 是单次上传写盘上限。StreamRequestBody=true 时 fasthttp 不再用
+// BodyLimit 约束流式 body，必须在 io.Copy 处手动强制，否则可被无界磁盘写入 DoS。
+const maxUploadSize = 512 * 1024 * 1024
+
 type FileServer struct {
 	db        *sql.DB
 	uploadDir string
@@ -34,7 +39,8 @@ func NewFileServer() (*FileServer, error) {
 		return nil, fmt.Errorf("failed to create uploads directory: %v", err)
 	}
 
-	db, err := sql.Open("sqlite3", "data/files.db")
+	// _busy_timeout 让并发写在锁等待 5s 内重试，避免高并发下 "database is locked" 被放大为可用性故障
+	db, err := sql.Open("sqlite3", "data/files.db?_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %v", err)
 	}
@@ -60,7 +66,7 @@ func NewFileServer() (*FileServer, error) {
 	app := fiber.New(fiber.Config{
 		Prefork:                 false,
 		ServerHeader:            "FileServer",
-		BodyLimit:               512 * 1024 * 1024,
+		BodyLimit:               maxUploadSize,
 		StreamRequestBody:       true,
 		ReadTimeout:             30 * time.Second,
 		WriteTimeout:            30 * time.Second,
@@ -128,8 +134,10 @@ Delete File:
 Server Time: %s
 `, host, host, host, host, host, now))
 	}
+	// c.Render 无 Views 引擎时回退到 text/template（不做 HTML 转义），而 c.Hostname()
+	// 在受信代理下会返回攻击者可控的 X-Forwarded-Host。必须显式转义，防止反射型 XSS。
 	return c.Render("static/index.html", fiber.Map{
-		"ServerHost": c.Hostname(),
+		"ServerHost": html.EscapeString(c.Hostname()),
 		"Protocol":   c.Protocol(),
 	})
 }
@@ -167,25 +175,35 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	}
 
 	encodedFilename := url.QueryEscape(decodedFilename)
-	log.Printf("Saving to DB - path: %s, filename: %s, encoded: %s", path, decodedFilename, encodedFilename)
 
 	filePath := filepath.Join(dirPath, decodedFilename)
 	out, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
+		os.Remove(dirPath)
 		return c.Status(500).SendString("Failed to save file")
 	}
 
-	// 流式写盘，避免将整个请求体读入内存（大文件并发会导致 OOM）
-	fileSize, copyErr := io.Copy(out, c.Context().RequestBodyStream())
+	// 流式写盘，避免将整个请求体读入内存（大文件并发会导致 OOM）。
+	// 同时用 LimitReader 强制 maxUploadSize 上限：StreamRequestBody 下 BodyLimit 不再生效，
+	// 否则攻击者可发送任意大小的流耗尽磁盘。多读 1 字节用于判定是否越界。
+	limited := io.LimitReader(c.Context().RequestBodyStream(), maxUploadSize+1)
+	fileSize, copyErr := io.Copy(out, limited)
 	if cerr := out.Close(); cerr != nil && copyErr == nil {
 		copyErr = cerr
 	}
 	if copyErr != nil {
 		os.Remove(filePath)
+		os.Remove(dirPath)
 		return c.Status(500).SendString("Failed to save file")
+	}
+	if fileSize > maxUploadSize {
+		os.Remove(filePath)
+		os.Remove(dirPath)
+		return c.Status(413).SendString("File too large")
 	}
 	if fileSize == 0 {
 		os.Remove(filePath)
+		os.Remove(dirPath)
 		return c.Status(400).SendString("Empty file content")
 	}
 
@@ -206,6 +224,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 
 	if err != nil {
 		os.Remove(filePath)
+		os.Remove(dirPath)
 		return c.Status(500).SendString("Failed to save file information")
 	}
 
@@ -382,14 +401,14 @@ func sanitizeFilename(filename string) string {
 	if filename == "" {
 		return ""
 	}
-	
+
 	// 使用 filepath.Base 移除任何路径组件，防止路径遍历
 	filename = filepath.Base(filename)
-	
+
 	// 移除危险的字符序列
 	filename = strings.ReplaceAll(filename, "..", "")
 	filename = strings.ReplaceAll(filename, "~", "")
-	
+
 	// 移除控制字符和不可见字符
 	var sanitized strings.Builder
 	for _, r := range filename {
@@ -401,14 +420,14 @@ func sanitizeFilename(filename string) string {
 		}
 		sanitized.WriteRune(r)
 	}
-	
+
 	result := strings.TrimSpace(sanitized.String())
-	
+
 	// 确保文件名不为空且不是特殊名称
 	if result == "" || result == "." || result == ".." {
 		return "unnamed_file"
 	}
-	
+
 	// 限制文件名长度（按 rune 边界截断，避免切断多字节 UTF-8 序列）
 	if len(result) > 255 {
 		ext := filepath.Ext(result)
@@ -425,7 +444,7 @@ func sanitizeFilename(filename string) string {
 		}
 		result = b.String() + ext
 	}
-	
+
 	return result
 }
 

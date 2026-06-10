@@ -312,7 +312,7 @@ class TinyUpload {
         const encodedFilename = encodeURIComponent(file.filename);
 
         const response = await fetch(
-            `/delete/${file.path}/${encodedFilename}`,
+            `/delete/${encodeURIComponent(file.path)}/${encodedFilename}`,
             {
                 method: 'DELETE',
                 headers: { 'X-Delete-Code': file.deleteCode }
@@ -332,7 +332,7 @@ class TinyUpload {
 
         try {
             const text = results.map(r => {
-                const url = `${this.baseUrl}/${r.path}/${encodeURIComponent(r.filename)}`;
+                const url = `${this.baseUrl}/${encodeURIComponent(r.path)}/${encodeURIComponent(r.filename)}`;
                 return `文件链接: ${url}\n删除码: ${r.deleteCode}`;
             }).join('\n\n');
 
@@ -422,15 +422,17 @@ class UIManager {
 
     showUploadResult(results, baseUrl) {
         const items = results.map(r => {
-            const encodedUrl = `${baseUrl}/${r.path}/${encodeURIComponent(r.filename)}`;
-            const displayUrl = `${baseUrl}/${r.path}/${this.escapeHtml(r.filename)}`;
+            const encodedPath = encodeURIComponent(r.path);
+            const encodedName = encodeURIComponent(r.filename);
+            const encodedUrl = `${baseUrl}/${encodedPath}/${encodedName}`;
+            const displayUrl = this.escapeHtml(`${baseUrl}/${r.path}/${r.filename}`);
             const filenameLine = results.length > 1
                 ? `<p class="result-filename">${this.escapeHtml(r.filename)}</p>`
                 : '';
             return `
                 <div class="result-item">
                     ${filenameLine}
-                    <p>文件链接: <a href="${encodedUrl}" target="_blank" rel="noopener">${displayUrl}</a></p>
+                    <p>文件链接: <a href="${this.escapeHtml(encodedUrl)}" target="_blank" rel="noopener">${displayUrl}</a></p>
                     <p>删除码: <span class="delete-code">${this.escapeHtml(r.deleteCode)}</span></p>
                 </div>
             `;
@@ -444,8 +446,8 @@ class UIManager {
         const div = document.createElement('div');
         div.className = 'file-item';
 
-        const uploadDate = new Date(file.uploadTime).toLocaleString();
-        const encodedFilename = encodeURIComponent(file.filename);
+        const uploadDate = this.escapeHtml(new Date(file.uploadTime).toLocaleString());
+        const downloadUrl = this.escapeHtml(`/${encodeURIComponent(file.path)}/${encodeURIComponent(file.filename)}`);
 
         div.innerHTML = `
             <div class="file-info">
@@ -456,7 +458,7 @@ class UIManager {
                 </div>
             </div>
             <div class="file-actions">
-                <a href="/${file.path}/${encodedFilename}" class="button" download="${this.escapeHtml(file.filename)}" rel="noopener">下载</a>
+                <a href="${downloadUrl}" class="button" download="${this.escapeHtml(file.filename)}" rel="noopener">下载</a>
                 ${file.deleteCode ? `<button class="button delete-button" type="button">删除</button>` : ''}
             </div>
         `;
@@ -541,10 +543,16 @@ class UIManager {
         return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
+    // 同时转义引号，使其在 HTML 文本与属性（title=、download=、href=）两种上下文下都安全。
+    // 原先用 textContent→innerHTML 不转义 " 和 '，属性上下文存在引号逃逸风险。
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[c]));
     }
 }
 
