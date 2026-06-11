@@ -203,6 +203,8 @@ class TinyUpload {
             copyButton: document.getElementById('copyButton'),
             langSwitch: document.getElementById('langSwitch'),
             themeToggle: document.getElementById('themeToggle'),
+            panelSwitch: document.getElementById('panelSwitch'),
+            panelsTrack: document.getElementById('panelsTrack'),
             cliCodes: {
                 upload: document.getElementById('uploadCommand'),
                 download: document.getElementById('downloadCommand'),
@@ -254,9 +256,7 @@ class TinyUpload {
         this.dom.cliCodes.download.textContent = `curl -O ${origin}/xxxx/${file}`;
         this.dom.cliCodes.delete.textContent = `curl -X DELETE "${origin}/xxxx/${file}?code=${code}"`;
 
-        this.dom.langSwitch.querySelectorAll('button').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.lang === this.lang.current);
-        });
+        this.dom.langSwitch.value = this.lang.current;
     }
 
     switchLanguage(lang) {
@@ -288,9 +288,18 @@ class TinyUpload {
 
         this.dom.themeToggle.addEventListener('click', () => this.toggleTheme());
 
-        this.dom.langSwitch.addEventListener('click', (e) => {
-            const btn = e.target.closest('button[data-lang]');
-            if (btn) this.switchLanguage(btn.dataset.lang);
+        // 上传 / 命令行 两张卡片滑动切换
+        this.dom.panelSwitch.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-panel]');
+            if (!btn) return;
+            this.dom.panelSwitch.querySelectorAll('button').forEach(b => {
+                b.classList.toggle('active', b === btn);
+            });
+            this.dom.panelsTrack.classList.toggle('show-cli', btn.dataset.panel === 'cli');
+        });
+
+        this.dom.langSwitch.addEventListener('change', (e) => {
+            this.switchLanguage(e.target.value);
         });
 
         // CLI 命令点击即复制
@@ -369,9 +378,19 @@ class TinyUpload {
 
     // ---- 上传 ----
 
+    showUploadPanel() {
+        this.dom.panelsTrack.classList.remove('show-cli');
+        this.dom.panelSwitch.querySelectorAll('button').forEach(b => {
+            b.classList.toggle('active', b.dataset.panel === 'upload');
+        });
+    }
+
     async handleFiles(files) {
         const validFiles = this.validateFiles(files);
         if (validFiles.length === 0) return;
+
+        // 正在看命令行卡片时拖拽/粘贴，滑回上传卡片显示进度
+        this.showUploadPanel();
 
         if (validFiles.length === 1) {
             await this.handleFile(validFiles[0]);
