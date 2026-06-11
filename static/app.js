@@ -252,7 +252,7 @@ class TinyUpload {
         const code = t('codeWord');
         this.dom.cliCodes.upload.textContent = `curl -T ${file} ${host}`;
         this.dom.cliCodes.download.textContent = `curl -O ${origin}/xxxx/${file}`;
-        this.dom.cliCodes.delete.textContent = `curl -X DELETE "${origin}/delete/xxxx/${file}?code=${code}"`;
+        this.dom.cliCodes.delete.textContent = `curl -X DELETE "${origin}/xxxx/${file}?code=${code}"`;
 
         this.dom.langSwitch.querySelectorAll('button').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.lang === this.lang.current);
@@ -565,7 +565,7 @@ class TinyUpload {
         const encodedFilename = encodeURIComponent(file.filename);
 
         const response = await fetch(
-            `/delete/${encodeURIComponent(file.path)}/${encodedFilename}`,
+            `/${encodeURIComponent(file.path)}/${encodedFilename}`,
             {
                 method: 'DELETE',
                 headers: { 'X-Delete-Code': file.deleteCode }

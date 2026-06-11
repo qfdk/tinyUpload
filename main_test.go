@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+)
 
 func TestInlineContentType_Whitelist(t *testing.T) {
 	inline := map[string]string{
@@ -104,5 +110,78 @@ func TestShareProtocol(t *testing.T) {
 		if got := shareProtocol(tc.proto, tc.host); got != tc.want {
 			t.Errorf("shareProtocol(%q, %q) = %q, want %q", tc.proto, tc.host, got, tc.want)
 		}
+	}
+}
+
+// TestDeleteRoute 验证删除与下载共用同一资源路径：DELETE /:path/:filename。
+// 旧的 /delete/:path/:filename 前缀路由已移除（临时上传服务，无兼容负担）。
+func TestDeleteRoute(t *testing.T) {
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+
+	s, err := NewFileServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.db.Close()
+	s.setupRoutes()
+
+	upload := func() (path, code string) {
+		t.Helper()
+		req := httptest.NewRequest("PUT", "/note.txt", strings.NewReader("hello"))
+		resp, err := s.app.Test(req, -1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != 200 {
+			t.Fatalf("upload status = %d, want 200", resp.StatusCode)
+		}
+		var r struct {
+			Path       string `json:"path"`
+			DeleteCode string `json:"deleteCode"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+			t.Fatal(err)
+		}
+		return r.Path, r.DeleteCode
+	}
+
+	// X-Delete-Code 头（网页用法）
+	path1, code1 := upload()
+	req := httptest.NewRequest("DELETE", "/"+path1+"/note.txt", nil)
+	req.Header.Set("X-Delete-Code", code1)
+	resp, _ := s.app.Test(req, -1)
+	if resp.StatusCode != 200 {
+		t.Errorf("DELETE /:path/:filename with header = %d, want 200", resp.StatusCode)
+	}
+
+	// ?code= 查询参数（CLI 用法）
+	path2, code2 := upload()
+	req = httptest.NewRequest("DELETE", "/"+path2+"/note.txt?code="+code2, nil)
+	resp, _ = s.app.Test(req, -1)
+	if resp.StatusCode != 200 {
+		t.Errorf("DELETE /:path/:filename with ?code= = %d, want 200", resp.StatusCode)
+	}
+
+	// 错误删除码必须拒绝
+	path3, code3 := upload()
+	req = httptest.NewRequest("DELETE", "/"+path3+"/note.txt", nil)
+	req.Header.Set("X-Delete-Code", "wrong000")
+	resp, _ = s.app.Test(req, -1)
+	if resp.StatusCode != 403 {
+		t.Errorf("DELETE with wrong code = %d, want 403", resp.StatusCode)
+	}
+
+	// 旧 /delete/ 前缀路由必须已移除
+	req = httptest.NewRequest("DELETE", "/delete/"+path3+"/note.txt?code="+code3, nil)
+	resp, _ = s.app.Test(req, -1)
+	if resp.StatusCode == 200 {
+		t.Errorf("legacy DELETE /delete/... still works (status 200), want removed")
 	}
 }

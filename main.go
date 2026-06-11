@@ -109,8 +109,9 @@ func (s *FileServer) setupRoutes() {
 	// "/:filename" 不匹配空段，单独注册 PUT /，支持 curl -T - 这类无名上传
 	s.app.Put("/", s.handleUpload)
 	s.app.Put("/:filename", s.handleUpload)
+	// 同一资源地址，不同方法：GET 下载，DELETE 删除（携带删除码）
 	s.app.Get("/:path/:filename", s.handleDownload)
-	s.app.Delete("/delete/:path/:filename", s.handleDelete)
+	s.app.Delete("/:path/:filename", s.handleDelete)
 
 	s.app.Use(func(c *fiber.Ctx) error {
 		return c.Redirect("/", 302)
@@ -132,7 +133,7 @@ Download File:
  wget %s/xxxx/filename
 
 Delete File:
- curl -X DELETE "%s/delete/xxxx/filename?code=delete_code"
+ curl -X DELETE "%s/xxxx/filename?code=delete_code"
 
 Server Time: %s
 `, host, host, host, host, host, now))
@@ -273,7 +274,7 @@ Size: %d bytes
 Type: %s
 
 Delete Command:
-curl -X DELETE "%s://%s/delete/%s/%s?code=%s"
+curl -X DELETE "%s://%s/%s/%s?code=%s"
 `,
 			decodedFilename,
 			proto, c.Hostname(), path, encodedFilename,

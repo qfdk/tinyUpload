@@ -74,7 +74,7 @@ wget http://localhost:8080/xxxx/文件名
 
 删除文件:
 ```bash
-curl -X DELETE "http://localhost:8080/delete/xxxx/文件名?code=删除码"
+curl -X DELETE "http://localhost:8080/xxxx/文件名?code=删除码"
 ```
 
 ## 数据存储
