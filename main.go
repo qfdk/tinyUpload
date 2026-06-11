@@ -105,6 +105,8 @@ func (s *FileServer) setupRoutes() {
 		return c.SendStatus(204)
 	})
 	s.app.Get("/", s.handleRoot)
+	// "/:filename" 不匹配空段，单独注册 PUT /，支持 curl -T - 这类无名上传
+	s.app.Put("/", s.handleUpload)
 	s.app.Put("/:filename", s.handleUpload)
 	s.app.Get("/:path/:filename", s.handleDownload)
 	s.app.Delete("/delete/:path/:filename", s.handleDelete)
@@ -157,8 +159,10 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 				}
 			}
 		}
+		// 仍无文件名（如 curl -T - 管道上传）：生成随机名，并尽量从请求
+		// Content-Type 推断后缀，让图片等类型能命中内联预览白名单。
 		if decodedFilename == "" {
-			return c.Status(400).SendString("No filename specified")
+			decodedFilename = generateRandomString(8) + extFromContentType(c.Get("Content-Type"))
 		}
 	}
 
@@ -496,6 +500,37 @@ var inlinePreviewTypes = map[string]string{
 	".ogg":  "audio/ogg",
 	".mp3":  "audio/mpeg",
 	".wav":  "audio/wav",
+}
+
+// contentTypeExts 把上传请求的 Content-Type 映射到首选文件后缀，给无名上传的
+// 随机文件名补后缀用。只收录 inlinePreviewTypes 对应的惰性类型；不用
+// mime.ExtensionsByType，避免 image/jpeg 拿到 ".jpe" 这类非首选后缀。
+var contentTypeExts = map[string]string{
+	"image/png":       ".png",
+	"image/jpeg":      ".jpg",
+	"image/gif":       ".gif",
+	"image/webp":      ".webp",
+	"image/avif":      ".avif",
+	"image/bmp":       ".bmp",
+	"text/plain":      ".txt",
+	"text/csv":        ".csv",
+	"text/markdown":   ".md",
+	"application/pdf": ".pdf",
+	"video/mp4":       ".mp4",
+	"video/webm":      ".webm",
+	"audio/ogg":       ".ogg",
+	"audio/mpeg":      ".mp3",
+	"audio/wav":       ".wav",
+}
+
+// extFromContentType 从 Content-Type 推断文件后缀；推不出（空值、octet-stream、
+// 未收录类型、解析失败）一律返回空串，调用方保持裸随机名。
+func extFromContentType(contentType string) string {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return ""
+	}
+	return contentTypeExts[mediaType]
 }
 
 // inlineContentType 返回文件可内联预览时的规范 Content-Type；不在白名单内返回 false。
