@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/big"
 	"mime"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -140,8 +141,38 @@ Server Time: %s
 	// 在受信代理下会返回攻击者可控的 X-Forwarded-Host。必须显式转义，防止反射型 XSS。
 	return c.Render("static/index.html", fiber.Map{
 		"ServerHost": html.EscapeString(c.Hostname()),
-		"Protocol":   c.Protocol(),
+		"Protocol":   shareProtocol(c.Protocol(), c.Hostname()),
 	})
+}
+
+// isLocalShareHost 判断 Host 是否为本机/内网地址（含端口形式）。
+func isLocalShareHost(host string) bool {
+	h := host
+	if hp, _, err := net.SplitHostPort(host); err == nil {
+		h = hp
+	}
+	h = strings.Trim(h, "[]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+}
+
+// shareProtocol 返回对外分享链接应使用的协议：公网主机一律 https
+// （生产域名经反代终止 TLS，明文 curl 上传时 c.Protocol() 也是 http，
+// 但返回给用户的链接应当是 https）；本机/内网保持原协议方便调试。
+func shareProtocol(proto, host string) string {
+	if proto == "https" {
+		return "https"
+	}
+	if isLocalShareHost(host) {
+		return "http"
+	}
+	return "https"
 }
 
 func (s *FileServer) handleUpload(c *fiber.Ctx) error {
@@ -233,21 +264,22 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	}
 
 	if isTextPreferred(c) {
+		proto := shareProtocol(c.Protocol(), c.Hostname())
 		return c.Type("text").SendString(fmt.Sprintf(`Upload successful!
 Filename: %s
-Access URL: http://%s/%s/%s
+Access URL: %s://%s/%s/%s
 Delete Code: %s
 Size: %d bytes
 Type: %s
 
 Delete Command:
-curl -X DELETE "http://%s/delete/%s/%s?code=%s"
+curl -X DELETE "%s://%s/delete/%s/%s?code=%s"
 `,
 			decodedFilename,
-			c.Hostname(), path, encodedFilename,
+			proto, c.Hostname(), path, encodedFilename,
 			deleteCode,
 			fileSize, mimeType,
-			c.Hostname(), path, encodedFilename, deleteCode,
+			proto, c.Hostname(), path, encodedFilename, deleteCode,
 		))
 	}
 

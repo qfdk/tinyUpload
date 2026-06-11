@@ -1,22 +1,40 @@
 :root {
-    --primary-color: #2196F3;
-    --primary-dark: #1976D2;
-    --primary-light: #E3F2FD;
-    --danger-color: #dc3545;
-    --danger-dark: #c82333;
-    --success-color: #4caf50;
-    --success-dark: #388e3c;
-    --warning-color: #ff9800;
-    --warning-dark: #f57c00;
-    --text-primary: #333;
-    --text-secondary: #666;
-    --text-muted: #999;
-    --border-color: #e0e0e0;
-    --shadow-light: 0 2px 4px rgba(0, 0, 0, 0.1);
-    --shadow-medium: 0 4px 8px rgba(0, 0, 0, 0.15);
-    --border-radius: 8px;
-    --border-radius-small: 4px;
-    --transition: all 0.3s ease;
+    --bg: #e9ebef;
+    --card: #f7f8fa;
+    --text: #1b1f27;
+    --text-2: #5c6470;
+    --text-3: #8d94a0;
+    --accent: #3b6cf6;
+    --accent-hover: #2c57d6;
+    --accent-soft: rgba(59, 108, 246, 0.08);
+    --danger: #e5484d;
+    --danger-hover: #cc3a3f;
+    --success: #2f9e63;
+    --border: #d9dce2;
+    --code-bg: #eceef2;
+    --radius: 14px;
+    --radius-s: 9px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --shadow-lg: 0 8px 30px rgba(16, 24, 40, 0.12);
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    --bg: #111418;
+    --card: #1a1e24;
+    --text: #e7eaee;
+    --text-2: #9ba3ad;
+    --text-3: #6b7280;
+    --accent: #5b8af8;
+    --accent-hover: #7da1fa;
+    --accent-soft: rgba(91, 138, 248, 0.12);
+    --danger: #e5484d;
+    --danger-hover: #f06b6f;
+    --border: #2a2f37;
+    --code-bg: #232830;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
 }
 
 * {
@@ -25,116 +43,164 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    max-width: 900px;
+    max-width: 680px;
     margin: 0 auto;
-    padding: 20px;
-    background-color: #f5f7fa;
-    color: var(--text-primary);
+    padding: 48px 20px 60px;
+    background-color: var(--bg);
+    color: var(--text);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
 }
 
-.container {
-    background-color: white;
-    padding: 30px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow-light);
+/* ---- 头部 ---- */
+.site-header {
+    text-align: center;
+    margin-bottom: 28px;
     position: relative;
 }
 
-.site-header {
-    text-align: center;
-    margin-bottom: 30px;
+.site-title {
+    font-size: 1.9em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0;
+    color: var(--text);
 }
 
-.site-title {
-    font-size: 2.5em;
-    margin: 0;
-    color: var(--primary-color);
+.site-title::before {
+    content: '📦 ';
 }
 
 .site-description {
-    color: #666;
-    margin-top: 10px;
+    color: var(--text-2);
+    margin: 6px 0 0;
+    font-size: 15px;
 }
 
+/* ---- 语言切换 ---- */
+.lang-switch {
+    display: inline-flex;
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--card);
+}
+
+.lang-switch button {
+    border: none;
+    background: none;
+    color: var(--text-2);
+    font-size: 12.5px;
+    padding: 4px 14px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lang-switch button:hover {
+    color: var(--text);
+}
+
+.lang-switch button.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ---- 主题切换 ---- */
+.theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--card);
+    box-shadow: var(--shadow);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.08);
+}
+
+.theme-toggle:active {
+    transform: scale(0.95);
+}
+
+/* ---- 上传区 ---- */
 .upload-area {
-    border: 2px dashed #ccc;
-    border-radius: 8px;
-    padding: 20px;
+    position: relative;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 44px 24px 36px;
     text-align: center;
-    margin-bottom: 20px;
-    background-color: #fafafa;
-    transition: all 0.3s ease;
+    background-color: var(--card);
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+    cursor: pointer;
+}
+
+.upload-area:hover {
+    border-color: var(--accent);
 }
 
 .upload-area.dragover {
-    border-color: var(--primary-color);
-    background-color: var(--primary-light);
-    transform: scale(1.02);
-}
-
-.upload-hint {
-    margin: 10px 0;
-    font-size: 16px;
-    color: var(--text-secondary);
-}
-
-.upload-shortcuts {
-    margin: 5px 0 15px;
-    font-size: 13px;
-    color: var(--text-muted);
-    font-style: italic;
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+    transform: scale(1.01);
 }
 
 .upload-icon {
-    font-size: 48px;
-    margin-bottom: 10px;
+    font-size: 40px;
+    margin-bottom: 6px;
 }
 
+.upload-hint {
+    margin: 8px 0 4px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.upload-shortcuts {
+    margin: 0 0 20px;
+    font-size: 12.5px;
+    color: var(--text-3);
+}
+
+/* ---- 按钮 ---- */
 .button {
-    background-color: var(--primary-color);
-    color: white;
-    padding: 8px 16px;
+    background-color: var(--accent);
+    color: #fff;
+    padding: 9px 22px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-s);
     cursor: pointer;
     font-size: 14px;
-    transition: background-color 0.3s ease;
+    font-weight: 500;
+    transition: background-color 0.15s ease, transform 0.1s ease;
     text-decoration: none;
     display: inline-block;
 }
 
 .button:hover {
-    background-color: var(--primary-dark);
+    background-color: var(--accent-hover);
 }
 
-.delete-button {
-    background-color: var(--danger-color);
+.button:active {
+    transform: scale(0.97);
 }
 
-.delete-button:hover {
-    background-color: var(--danger-dark);
-}
-
-.copy-button {
-    background-color: var(--success-color);
-}
-
-.copy-button:hover {
-    background-color: var(--success-dark);
-}
-
-.cancel-button {
-    background-color: var(--warning-color);
-    margin-top: 10px;
-}
-
-.cancel-button:hover {
-    background-color: var(--warning-dark);
-}
-
-.button:focus {
-    outline: 2px solid var(--primary-color);
+.button:focus-visible {
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
@@ -144,38 +210,81 @@ body {
     pointer-events: none;
 }
 
+.delete-button {
+    background-color: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    padding: 8px 21px;
+}
+
+.delete-button:hover {
+    background-color: var(--danger);
+    color: #fff;
+}
+
+.copy-button {
+    background-color: var(--success);
+}
+
+.copy-button:hover {
+    background-color: #278654;
+}
+
+.cancel-button {
+    background-color: transparent;
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    margin-top: 12px;
+}
+
+.cancel-button:hover {
+    background-color: var(--code-bg);
+    color: var(--text);
+}
+
+#fileInput {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* ---- 进度 ---- */
 #uploadProgress {
-    margin-top: 15px;
+    margin-top: 20px;
     display: none;
 }
 
 .progress-bar {
-    height: 20px;
-    background-color: #e9ecef;
-    border-radius: 4px;
+    height: 6px;
+    background-color: var(--code-bg);
+    border-radius: 999px;
     overflow: hidden;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
 }
 
 .progress-bar-fill {
     height: 100%;
-    background-color: var(--primary-color);
+    background-color: var(--accent);
+    border-radius: 999px;
     transition: width 0.3s ease;
 }
 
 .status-text {
-    color: #666;
-    font-size: 14px;
+    color: var(--text-2);
+    font-size: 13px;
 }
 
+/* ---- 上传结果 ---- */
 .upload-result {
     position: relative;
-    margin: 20px 0;
-    padding: 20px 40px 20px 20px;
-    background-color: #fff;
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin: 16px 0;
+    padding: 20px 44px 18px 22px;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
     word-break: break-all;
 }
 
@@ -184,33 +293,57 @@ body {
 }
 
 .upload-result h3 {
-    margin: 0 0 12px;
-    color: var(--success-color);
-    font-size: 18px;
+    margin: 0 0 10px;
+    color: var(--success);
+    font-size: 16px;
+}
+
+.upload-result p {
+    margin: 4px 0;
+    font-size: 14px;
+    color: var(--text-2);
+}
+
+.upload-result a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.upload-result a:hover {
+    text-decoration: underline;
+}
+
+.delete-code {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    padding: 1px 7px;
+    border-radius: 5px;
+    font-size: 13px;
+    color: var(--text);
 }
 
 .result-close {
     position: absolute;
-    top: 8px;
-    right: 10px;
+    top: 10px;
+    right: 12px;
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: 22px;
     line-height: 1;
     cursor: pointer;
-    color: var(--text-muted);
+    color: var(--text-3);
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 .result-close:hover {
-    color: var(--text-primary);
-    background-color: #f0f0f0;
+    color: var(--text);
+    background-color: var(--code-bg);
 }
 
 .result-item {
     padding: 10px 0;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border);
 }
 
 .result-item:first-child {
@@ -221,77 +354,131 @@ body {
 .result-filename {
     font-weight: 600;
     margin: 0 0 6px;
+    color: var(--text);
 }
 
+.copy-button {
+    margin-top: 12px;
+    padding: 5px 14px;
+    font-size: 12.5px;
+}
+
+/* ---- CLI ---- */
 .shortcuts {
-    margin: 30px 0;
-    padding: 20px;
-    background-color: #f8f9fa;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
+    margin: 28px 0 0;
+}
+
+.shortcuts summary {
+    cursor: pointer;
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.shortcuts summary::-webkit-details-marker {
+    display: none;
+}
+
+.shortcuts summary::before {
+    content: '▸';
+    font-size: 11px;
+    color: var(--text-3);
+    transition: transform 0.15s ease;
+}
+
+.shortcuts[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.shortcuts h3 {
+    display: inline;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    margin: 0;
+}
+
+.shortcuts[open] summary {
+    margin-bottom: 12px;
 }
 
 .cli-commands {
     display: grid;
-    gap: 12px;
+    gap: 10px;
 }
 
 .cli-command {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
 }
 
 .cli-command label {
     font-weight: 500;
-    color: var(--text-primary);
-    font-size: 14px;
+    color: var(--text-2);
+    font-size: 13px;
 }
 
 .shortcuts code {
-    background-color: #e9ecef;
-    padding: 8px 12px;
-    border-radius: var(--border-radius-small);
-    font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', monospace;
-    font-size: 13px;
+    background-color: var(--code-bg);
+    padding: 9px 14px;
+    border-radius: var(--radius-s);
+    font-family: 'SF Mono', Menlo, Consolas, 'Roboto Mono', monospace;
+    font-size: 12.5px;
+    color: var(--text);
     word-break: break-all;
-    border: 1px solid #dee2e6;
     cursor: pointer;
-    transition: var(--transition);
-    line-height: 1.4;
+    transition: background-color 0.15s ease;
+    line-height: 1.5;
 }
 
 .shortcuts code:hover,
 .shortcuts code:focus {
-    background-color: #dee2e6;
-    border-color: var(--primary-color);
+    background-color: var(--accent-soft);
     outline: none;
 }
 
-.shortcuts code:focus {
-    box-shadow: 0 0 0 2px var(--primary-light);
+/* ---- 文件列表 ---- */
+.file-list {
+    margin-top: 28px;
 }
 
-.file-list {
-    margin-top: 20px;
+.file-list h3 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    margin: 0 0 12px;
 }
 
 .file-item {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    padding: 15px;
-    border-bottom: 1px solid #eee;
-    background-color: #fff;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    opacity: 1;
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-.file-item:last-child {
-    border-bottom: none;
+.file-item.deleting {
+    opacity: 0;
+    transform: translateX(20px);
 }
 
 .file-info {
     flex-grow: 1;
-    margin-right: 15px;
+    min-width: 0;
 }
 
 .file-name {
@@ -300,9 +487,9 @@ body {
 }
 
 .file-meta {
-    color: #666;
-    font-size: 0.9em;
-    margin-top: 4px;
+    color: var(--text-3);
+    font-size: 12.5px;
+    margin-top: 2px;
 }
 
 .file-meta span {
@@ -312,112 +499,43 @@ body {
 
 .file-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
-#fileInput {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-    z-index: 1;
+.file-actions .button {
+    padding: 7px 16px;
+    font-size: 13px;
 }
 
-@media (max-width: 600px) {
-    body {
-        padding: 10px;
-    }
-
-    .container {
-        padding: 15px;
-    }
-
-    .site-title {
-        font-size: 2em;
-    }
-
-    .file-item {
-        padding: 12px;
-        flex-direction: column;
-    }
-
-    .file-info {
-        width: 100%;
-        margin-right: 0;
-        margin-bottom: 8px;
-    }
-
-    .file-name {
-        font-size: 15px;
-        margin-bottom: 6px;
-    }
-
-    .file-meta {
-        font-size: 13px;
-        line-height: 1.4;
-    }
-
-    .file-meta span {
-        display: block;
-        margin-bottom: 3px;
-        margin-right: 0;
-    }
-
-    .file-actions {
-        margin-top: 8px;
-        width: 100%;
-        justify-content: flex-start;
-        gap: 8px;
-    }
-
-    .file-actions .button {
-        width: 60px;
-        text-align: center;
-        padding: 8px 0;
-    }
-
-    .upload-result {
-        word-break: break-all;
-    }
-    .shortcuts {
-        word-break: break-word;
-        font-size: 13px;  /* 小屏幕稍微减小字体 */
-    }
-
-    .shortcuts code {
-        padding: 2px 3px;  /* 小屏幕减小内边距 */
-        font-size: 12px;   /* 代码字体稍微缩小 */
-    }
+.file-actions .delete-button {
+    padding: 6px 15px;
 }
 
+/* ---- 确认对话框 ---- */
 .confirm-dialog {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     opacity: 0;
     transition: opacity 0.2s;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(3px);
 }
 
 .confirm-dialog-content {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background: var(--card);
+    color: var(--text);
+    padding: 24px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
     text-align: center;
     max-width: 90%;
-    width: 300px;
-    transform: translateY(20px);
+    width: 320px;
+    transform: translateY(16px);
     transition: transform 0.2s;
 }
 
@@ -433,144 +551,89 @@ body {
 }
 
 .confirm-yes {
-    background: #f44336;
-    color: white;
+    background: var(--danger);
+    color: #fff;
     border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 8px 20px;
+    border-radius: var(--radius-s);
     cursor: pointer;
+    font-size: 14px;
+}
+
+.confirm-yes:hover {
+    background: var(--danger-hover);
 }
 
 .confirm-no {
-    background: #9e9e9e;
-    color: white;
+    background: var(--code-bg);
+    color: var(--text);
     border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 8px 20px;
+    border-radius: var(--radius-s);
     cursor: pointer;
+    font-size: 14px;
 }
 
+/* ---- Toast ---- */
 .toast {
     position: fixed;
-    top: 20px;
+    bottom: 28px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 10px 20px;
-    border-radius: 4px;
-    font-size: 14px;
+    background: rgba(20, 22, 26, 0.92);
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: 13.5px;
     z-index: 1000;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-lg);
     opacity: 0;
     transition: opacity 0.3s ease;
+    max-width: 86vw;
+    text-align: center;
 }
 
-.file-item {
-    opacity: 1;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.file-item.deleting {
-    opacity: 0;
-    transform: translateX(20px);
-}
-
-/* 无障碍访问支持 */
-.sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-}
-
-/* 键盘导航支持 */
-*:focus {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
-}
-
-button:focus,
-a:focus,
-input:focus {
-    outline-color: var(--primary-color);
-}
-
-/* 无脚本支持 */
+/* ---- 无脚本提示 ---- */
 .noscript-message {
-    background-color: #fff3cd;
-    border: 1px solid #ffeaa7;
-    border-radius: var(--border-radius);
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     padding: 20px;
     margin: 20px 0;
     text-align: center;
 }
 
-.noscript-message h2 {
-    color: #856404;
-    margin-top: 0;
-}
-
 .noscript-message code {
-    background-color: #f8f9fa;
+    background-color: var(--code-bg);
     padding: 4px 8px;
-    border-radius: var(--border-radius-small);
+    border-radius: 5px;
     font-family: monospace;
 }
 
-/* 改进的文件输入样式 */
-#fileInput {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-}
+/* ---- 响应式 ---- */
+@media (max-width: 600px) {
+    body {
+        padding: 28px 14px 40px;
+    }
 
-/* 加载状态 */
-.loading {
-    position: relative;
-    pointer-events: none;
-}
+    .site-title {
+        font-size: 1.6em;
+    }
 
-.loading::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    margin: -10px 0 0 -10px;
-    border: 2px solid transparent;
-    border-top: 2px solid var(--primary-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
+    .upload-area {
+        padding: 32px 16px 28px;
+    }
 
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
+    .file-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .file-actions {
+        justify-content: flex-end;
     }
 }
 
-/* 高对比度模式支持 */
-@media (prefers-contrast: high) {
-    :root {
-        --border-color: #000;
-        --text-secondary: #000;
-    }
-    
-    .button {
-        border: 2px solid currentColor;
-    }
-}
-
-/* 减少动画模式支持 */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -579,46 +642,5 @@ input:focus {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
-    }
-}
-
-/* 深色模式支持 */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --text-primary: #e0e0e0;
-        --text-secondary: #b0b0b0;
-        --text-muted: #888;
-        --border-color: #444;
-    }
-    
-    body {
-        background-color: #1a1a1a;
-        color: var(--text-primary);
-    }
-    
-    .container {
-        background-color: #2d2d2d;
-        border: 1px solid var(--border-color);
-    }
-    
-    .upload-area {
-        background-color: #333;
-        border-color: var(--border-color);
-    }
-    
-    .shortcuts {
-        background-color: #333;
-        border-color: var(--border-color);
-    }
-    
-    .shortcuts code {
-        background-color: #444;
-        border-color: var(--border-color);
-        color: var(--text-primary);
-    }
-    
-    .file-item {
-        background-color: #333;
-        border-color: var(--border-color);
     }
 }

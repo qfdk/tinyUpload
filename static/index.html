@@ -4,72 +4,79 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="简单、安全的文件上传服务，支持拖拽上传和命令行操作">
-    <meta name="keywords" content="文件上传,file upload,简单上传,drag drop">
-    <meta name="theme-color" content="#2196F3">
+    <meta name="theme-color" content="#3b6cf6">
     <title>{{.ServerHost}} - 简单上传, Simple Is Beautiful</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <script>
+        (function () {
+            var theme;
+            try { theme = localStorage.getItem('theme'); } catch (e) {}
+            if (theme !== 'light' && theme !== 'dark') {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
     <link rel="stylesheet" href="static/style.css">
-    <link rel="preload" href="static/app.js" as="script">
 </head>
 <body>
-<div class="container">
-    <header class="site-header">
-        <h1 class="site-title">{{.ServerHost}}</h1>
-        <p class="site-description">简单上传, Simple Is Beautiful</p>
-    </header>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="Theme">🌙</button>
+<header class="site-header">
+    <h1 class="site-title">{{.ServerHost}}</h1>
+    <p class="site-description" data-i18n="tagline">简单上传 · Simple Is Beautiful</p>
+    <div class="lang-switch" id="langSwitch" role="group" aria-label="Language">
+        <button type="button" data-lang="zh">中文</button>
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="fr">FR</button>
+    </div>
+</header>
 
-    <main class="upload-area" id="dropZone" role="main" aria-label="文件上传区域">
-        <div class="upload-icon" aria-hidden="true">📦</div>
-        <p class="upload-hint">拖拽文件到此处或点击选择文件</p>
-        <p class="upload-shortcuts" id="uploadShortcuts" aria-label="快捷键提示">快捷键: Ctrl+U 选择文件, Ctrl+C 复制结果, ESC 取消上传</p>
-        <button class="button" id="selectButton" type="button" aria-describedby="upload-hint">选择文件</button>
-        <input type="file" id="fileInput" aria-label="选择要上传的文件" multiple>
+<main class="upload-area" id="dropZone" aria-label="Upload">
+    <div class="upload-icon" aria-hidden="true">📦</div>
+    <p class="upload-hint" data-i18n="dropHint">拖拽、粘贴（⌘V），或点击上传</p>
+    <input type="file" id="fileInput" aria-label="File" multiple>
 
-        <div id="uploadProgress" aria-live="polite" aria-label="上传进度">
-            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div class="progress-bar-fill"></div>
-            </div>
-            <div class="status-text"></div>
-            <button class="button cancel-button" id="cancelButton" type="button" style="display: none">取消上传</button>
+    <div id="uploadProgress" aria-live="polite">
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-bar-fill"></div>
         </div>
-    </main>
+        <div class="status-text"></div>
+        <button class="button cancel-button" id="cancelButton" type="button" style="display: none" data-i18n="cancel">取消</button>
+    </div>
+</main>
 
-    <section class="upload-result" id="uploadResult" aria-live="polite" hidden>
-        <button class="result-close" id="resultClose" type="button" aria-label="关闭">×</button>
-        <h3>上传成功！</h3>
-        <div id="resultContent"></div>
-        <button class="button copy-button" id="copyButton" type="button" aria-label="复制文件链接和删除码">复制信息</button>
-    </section>
+<section class="upload-result" id="uploadResult" aria-live="polite" hidden>
+    <button class="result-close" id="resultClose" type="button" aria-label="Close">×</button>
+    <h3 data-i18n="uploadSuccess">上传成功</h3>
+    <div id="resultContent"></div>
+    <button class="button copy-button" id="copyButton" type="button" data-i18n="copyInfo">复制信息</button>
+</section>
 
-    <section class="shortcuts" id="cliShortcuts" aria-labelledby="cli-title">
-        <h3 id="cli-title">命令行快捷操作</h3>
-        <div class="cli-commands">
-            <div class="cli-command">
-                <label for="uploadCommand">上传文件：</label>
-                <code id="uploadCommand" tabindex="0">curl -T 文件名 {{.ServerHost}}</code>
-            </div>
-            <div class="cli-command">
-                <label for="downloadCommand">下载文件：</label>
-                <code id="downloadCommand" tabindex="0">curl -O {{.Protocol}}://{{.ServerHost}}/xxxx/文件名</code>
-            </div>
-            <div class="cli-command">
-                <label for="deleteCommand">删除文件：</label>
-                <code id="deleteCommand" tabindex="0">curl -X DELETE "{{.Protocol}}://{{.ServerHost}}/delete/xxxx/文件名?code=删除码"</code>
-            </div>
+<details class="shortcuts" id="cliShortcuts">
+    <summary><h3 data-i18n="cliTitle">命令行用法</h3></summary>
+    <div class="cli-commands">
+        <div class="cli-command">
+            <label for="uploadCommand" data-i18n="cliUpload">上传</label>
+            <code id="uploadCommand" tabindex="0">curl -T 文件名 {{.ServerHost}}</code>
         </div>
-    </section>
+        <div class="cli-command">
+            <label for="downloadCommand" data-i18n="cliDownload">下载</label>
+            <code id="downloadCommand" tabindex="0">curl -O {{.Protocol}}://{{.ServerHost}}/xxxx/文件名</code>
+        </div>
+        <div class="cli-command">
+            <label for="deleteCommand" data-i18n="cliDelete">删除</label>
+            <code id="deleteCommand" tabindex="0">curl -X DELETE "{{.Protocol}}://{{.ServerHost}}/delete/xxxx/文件名?code=删除码"</code>
+        </div>
+    </div>
+</details>
 
-    <section class="file-list" id="fileList" aria-labelledby="files-title">
-        <!-- 文件列表动态生成 -->
-    </section>
-</div>
+<section class="file-list" id="fileList"></section>
 
 <script src="static/app.js"></script>
 <noscript>
     <div class="noscript-message">
-        <h2>需要启用 JavaScript</h2>
-        <p>此页面需要启用 JavaScript 才能正常工作。请在浏览器设置中启用 JavaScript 后刷新页面。</p>
-        <p>您也可以使用命令行工具进行文件上传：</p>
+        <h2>需要启用 JavaScript / JavaScript required</h2>
+        <p>此页面需要启用 JavaScript 才能正常工作。您也可以使用命令行上传：</p>
         <code>curl -T 文件名 {{.ServerHost}}</code>
     </div>
 </noscript>

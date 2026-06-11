@@ -79,3 +79,30 @@ func TestInlineContentType_BlocksScriptable(t *testing.T) {
 		}
 	}
 }
+
+func TestShareProtocol(t *testing.T) {
+	cases := []struct {
+		proto, host, want string
+	}{
+		// 公网域名/IP：无论请求协议一律 https
+		{"http", "tar.tn", "https"},
+		{"http", "tar.tn:8080", "https"},
+		{"https", "tar.tn", "https"},
+		{"http", "8.8.8.8", "https"},
+		// 本机/内网：保持 http 方便调试
+		{"http", "localhost:8080", "http"},
+		{"http", "localhost", "http"},
+		{"http", "127.0.0.1:8080", "http"},
+		{"http", "[::1]:8080", "http"},
+		{"http", "10.0.0.2", "http"},
+		{"http", "192.168.1.5:3000", "http"},
+		{"http", "172.16.0.1", "http"},
+		// 本机但请求已是 https：保持 https
+		{"https", "localhost:8080", "https"},
+	}
+	for _, tc := range cases {
+		if got := shareProtocol(tc.proto, tc.host); got != tc.want {
+			t.Errorf("shareProtocol(%q, %q) = %q, want %q", tc.proto, tc.host, got, tc.want)
+		}
+	}
+}
