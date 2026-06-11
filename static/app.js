@@ -6,7 +6,7 @@
 
 const I18N = {
     zh: {
-        tagline: '简单上传 · Simple Is Beautiful',
+        siteTitle: '极简上传',
         dropHint: '拖拽、粘贴（⌘V），或点击上传',
         uploadSuccess: '上传成功',
         copyInfo: '复制信息',
@@ -45,7 +45,7 @@ const I18N = {
         retention: '文件保存 3 天后自动删除',
     },
     en: {
-        tagline: 'Simple file sharing',
+        siteTitle: 'Simple Upload',
         dropHint: 'Drag & drop, paste (⌘V), or click to upload',
         uploadSuccess: 'Uploaded',
         copyInfo: 'Copy info',
@@ -84,7 +84,7 @@ const I18N = {
         retention: 'Files are deleted automatically after 3 days',
     },
     fr: {
-        tagline: 'Partage de fichiers, tout simplement',
+        siteTitle: 'Envoi simple',
         dropHint: 'Glissez-déposez, collez (⌘V) ou cliquez pour téléverser',
         uploadSuccess: 'Téléversement réussi',
         copyInfo: 'Copier les infos',
