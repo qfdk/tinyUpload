@@ -246,7 +246,7 @@ body {
 }
 
 .upload-icon {
-    font-size: 40px;
+    color: var(--accent);
     margin-bottom: 6px;
 }
 
