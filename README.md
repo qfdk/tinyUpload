@@ -92,4 +92,4 @@ curl -X DELETE "http://localhost:8080/xxxx/文件名?code=删除码"
 
 ## 许可证
 
-MIT License
+[GNU General Public License v3.0](LICENSE)（GPL-3.0）——衍生作品须以相同许可证开源。
