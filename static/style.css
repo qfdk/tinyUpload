@@ -91,8 +91,8 @@ body::after {
 }
 
 .site-title .logo {
-    width: 38px;
-    height: 38px;
+    font-size: 0.95em;
+    line-height: 1;
     flex-shrink: 0;
 }
 

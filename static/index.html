@@ -6,7 +6,7 @@
     <meta name="description" content="简单、安全的文件上传服务，支持拖拽上传和命令行操作">
     <meta name="theme-color" content="#1da1f2">
     <title>{{.ServerHost}} - 简单上传, Simple Is Beautiful</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%2342baf3'/><stop offset='1' stop-color='%231da1f2'/></linearGradient></defs><rect width='64' height='64' rx='15' fill='url(%23g)'/><path d='M32 13L45 27H38V39H26V27H19Z' fill='%23fff'/><path d='M18 42v5a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-5' stroke='%23fff' stroke-width='5' fill='none' stroke-linecap='round'/></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
     <script>
         (function () {
             var theme;
@@ -32,17 +32,7 @@
 </div>
 <header class="site-header">
     <h1 class="site-title">
-        <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
-            <defs>
-                <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stop-color="#42baf3"/>
-                    <stop offset="1" stop-color="#1da1f2"/>
-                </linearGradient>
-            </defs>
-            <rect width="64" height="64" rx="15" fill="url(#logo-g)"/>
-            <path d="M32 13L45 27H38V39H26V27H19Z" fill="#fff"/>
-            <path d="M18 42v5a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-5" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>
-        </svg>
+        <span class="logo" aria-hidden="true">📦</span>
         <span>{{.ServerHost}}</span>
     </h1>
     <p class="site-description" data-i18n="tagline">简单上传 · Simple Is Beautiful</p>
@@ -57,9 +47,8 @@
     <div class="panels-track" id="panelsTrack">
         <main class="upload-area" id="dropZone" aria-label="Upload">
             <div class="upload-icon" aria-hidden="true">
-                <svg width="56" height="56" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M17.5 19H6a4 4 0 0 1-1.45-7.73A7 7 0 0 1 18 8.92 4.5 4.5 0 0 1 17.5 19z"/>
-                    <path fill="#fff" d="M12 8.6l3.6 3.8h-2.2v3.8h-2.8v-3.8H8.4z"/>
+                <svg width="58" height="58" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
                 </svg>
             </div>
             <p class="upload-hint" data-i18n="dropHint">拖拽、粘贴（⌘V），或点击上传</p>
