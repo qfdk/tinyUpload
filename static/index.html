@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="简单、安全的文件上传服务，支持拖拽上传和命令行操作">
-    <meta name="theme-color" content="#3b6cf6">
+    <meta name="theme-color" content="#1da1f2">
     <title>{{.ServerHost}} - 简单上传, Simple Is Beautiful</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%2342baf3'/><stop offset='1' stop-color='%231da1f2'/></linearGradient></defs><rect width='64' height='64' rx='15' fill='url(%23g)'/><path d='M32 13L45 27H38V39H26V27H19Z' fill='%23fff'/><path d='M18 42v5a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-5' stroke='%23fff' stroke-width='5' fill='none' stroke-linecap='round'/></svg>">
     <script>
         (function () {
             var theme;
@@ -17,7 +17,7 @@
             document.documentElement.dataset.theme = theme;
         })();
     </script>
-    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="static/style.css?v={{.AssetVer}}">
 </head>
 <body>
 <div class="top-controls">
@@ -31,7 +31,20 @@
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Theme">🌙</button>
 </div>
 <header class="site-header">
-    <h1 class="site-title">{{.ServerHost}}</h1>
+    <h1 class="site-title">
+        <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+            <defs>
+                <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#42baf3"/>
+                    <stop offset="1" stop-color="#1da1f2"/>
+                </linearGradient>
+            </defs>
+            <rect width="64" height="64" rx="15" fill="url(#logo-g)"/>
+            <path d="M32 13L45 27H38V39H26V27H19Z" fill="#fff"/>
+            <path d="M18 42v5a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-5" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span>{{.ServerHost}}</span>
+    </h1>
     <p class="site-description" data-i18n="tagline">简单上传 · Simple Is Beautiful</p>
 </header>
 
@@ -44,10 +57,8 @@
     <div class="panels-track" id="panelsTrack">
         <main class="upload-area" id="dropZone" aria-label="Upload">
             <div class="upload-icon" aria-hidden="true">
-                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
-                    <path d="M12 12v9"/>
-                    <path d="m16 16-4-4-4 4"/>
+                <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3.5 3">
+                    <path d="M17.5 19H6a4 4 0 0 1-1.45-7.73A7 7 0 0 1 18 8.92 4.5 4.5 0 0 1 17.5 19z"/>
                 </svg>
             </div>
             <p class="upload-hint" data-i18n="dropHint">拖拽、粘贴（⌘V），或点击上传</p>
@@ -92,9 +103,11 @@
     <button class="button copy-button" id="copyButton" type="button" data-i18n="copyInfo">复制信息</button>
 </section>
 
+<p class="retention" data-i18n="retention">文件保存 3 天后自动删除</p>
+
 <section class="file-list" id="fileList"></section>
 
-<script src="static/app.js"></script>
+<script src="static/app.js?v={{.AssetVer}}"></script>
 <noscript>
     <div class="noscript-message">
         <h2>需要启用 JavaScript / JavaScript required</h2>

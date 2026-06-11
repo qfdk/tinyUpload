@@ -26,6 +26,10 @@ import (
 // BodyLimit 约束流式 body，必须在 io.Copy 处手动强制，否则可被无界磁盘写入 DoS。
 const maxUploadSize = 512 * 1024 * 1024
 
+// assetVersion 以进程启动时间作为静态资源版本号，部署重启后自动失效浏览器缓存，
+// 避免新 HTML 配旧 JS/CSS 的混搭（曾导致 i18n 键名裸显示）。
+var assetVersion = fmt.Sprint(time.Now().Unix())
+
 type FileServer struct {
 	db        *sql.DB
 	uploadDir string
@@ -143,6 +147,7 @@ Server Time: %s
 	return c.Render("static/index.html", fiber.Map{
 		"ServerHost": html.EscapeString(c.Hostname()),
 		"Protocol":   shareProtocol(c.Protocol(), c.Hostname()),
+		"AssetVer":   assetVersion,
 	})
 }
 

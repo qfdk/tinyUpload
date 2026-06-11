@@ -4,9 +4,9 @@
     --text: #1b1f27;
     --text-2: #5c6470;
     --text-3: #8d94a0;
-    --accent: #3b6cf6;
-    --accent-hover: #2c57d6;
-    --accent-soft: rgba(59, 108, 246, 0.08);
+    --accent: #1da1f2;
+    --accent-hover: #1a8cd8;
+    --accent-soft: rgba(29, 161, 242, 0.1);
     --danger: #e5484d;
     --danger-hover: #cc3a3f;
     --success: #2f9e63;
@@ -16,6 +16,7 @@
     --radius-s: 9px;
     --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
     --shadow-lg: 0 8px 30px rgba(16, 24, 40, 0.12);
+    --glow: rgba(29, 161, 242, 0.07);
     color-scheme: light;
 }
 
@@ -25,15 +26,16 @@
     --text: #e7eaee;
     --text-2: #9ba3ad;
     --text-3: #6b7280;
-    --accent: #5b8af8;
-    --accent-hover: #7da1fa;
-    --accent-soft: rgba(91, 138, 248, 0.12);
+    --accent: #45b8f5;
+    --accent-hover: #6cc8f8;
+    --accent-soft: rgba(69, 184, 245, 0.12);
     --danger: #e5484d;
     --danger-hover: #f06b6f;
     --border: #2a2f37;
     --code-bg: #232830;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+    --glow: rgba(69, 184, 245, 0.06);
     color-scheme: dark;
 }
 
@@ -45,11 +47,28 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     max-width: 680px;
     margin: 0 auto;
-    padding: 48px 20px 60px;
+    padding: 40px 20px;
     background-color: var(--bg);
+    background-image: radial-gradient(640px 320px at 50% -60px, var(--glow), transparent 70%);
+    background-repeat: no-repeat;
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 内容不满一屏时整体垂直居中，超出后恢复正常文档流滚动 */
+body::before {
+    content: '';
+    margin-top: auto;
+}
+
+body::after {
+    content: '';
+    margin-bottom: auto;
 }
 
 /* ---- 头部 ---- */
@@ -60,6 +79,10 @@ body {
 }
 
 .site-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
     font-size: 1.9em;
     font-weight: 700;
     letter-spacing: -0.02em;
@@ -67,8 +90,10 @@ body {
     color: var(--text);
 }
 
-.site-title::before {
-    content: '📦 ';
+.site-title .logo {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
 }
 
 .site-description {
@@ -227,7 +252,7 @@ body {
     position: relative;
     border: 1.5px dashed var(--border);
     border-radius: var(--radius);
-    padding: 44px 24px 36px;
+    padding: 56px 24px 48px;
     text-align: center;
     background-color: var(--card);
     box-shadow: var(--shadow);
@@ -246,8 +271,14 @@ body {
 }
 
 .upload-icon {
-    color: var(--accent);
+    color: var(--text-3);
     margin-bottom: 6px;
+    transition: color 0.2s ease;
+}
+
+.upload-area:hover .upload-icon,
+.upload-area.dragover .upload-icon {
+    color: var(--accent);
 }
 
 .upload-hint {
@@ -513,7 +544,7 @@ body {
     text-align: center;
 }
 
-.tag-up   { background: rgba(91, 138, 248, 0.18); color: #8fb0fa; }
+.tag-up   { background: rgba(29, 161, 242, 0.18); color: #7cc8f7; }
 .tag-down { background: rgba(40, 200, 64, 0.15);  color: #6fd584; }
 .tag-del  { background: rgba(255, 95, 87, 0.15);  color: #f09290; }
 
@@ -536,6 +567,14 @@ body {
 .cli-line code:focus {
     color: #ffffff;
     outline: none;
+}
+
+/* ---- 保存期限提示 ---- */
+.retention {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--text-3);
+    margin: 14px 0 0;
 }
 
 /* ---- 文件列表 ---- */

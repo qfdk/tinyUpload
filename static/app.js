@@ -42,6 +42,7 @@ const I18N = {
         copied: '复制成功！',
         copyFailed: '复制失败',
         linkCopied: '链接已自动复制',
+        retention: '文件保存 3 天后自动删除',
     },
     en: {
         tagline: 'Simple file sharing',
@@ -80,6 +81,7 @@ const I18N = {
         copied: 'Copied!',
         copyFailed: 'Copy failed',
         linkCopied: 'Link copied to clipboard',
+        retention: 'Files are deleted automatically after 3 days',
     },
     fr: {
         tagline: 'Partage de fichiers, tout simplement',
@@ -118,6 +120,7 @@ const I18N = {
         copied: 'Copié !',
         copyFailed: 'Échec de la copie',
         linkCopied: 'Lien copié automatiquement',
+        retention: 'Les fichiers sont supprimés automatiquement après 3 jours',
     },
 };
 
