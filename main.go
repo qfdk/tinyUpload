@@ -292,12 +292,19 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 		log.Printf("Error updating download count: %v", err)
 	}
 
-	// 防止上传内容被浏览器当作页面在同源内联执行（存储型 XSS）：
-	// 强制下载（attachment）+ 禁止 MIME 嗅探 + CSP 沙箱兜底
+	// 默认禁止 MIME 嗅探；只有白名单内的惰性类型（图片/纯文本/PDF/音视频）允许
+	// 内联预览，其余一律强制下载并加 CSP 沙箱兜底，防止同源内联执行（存储型 XSS）。
+	// 白名单按扩展名判定且显式排除 text/html、image/svg+xml 等可承载脚本的类型，
+	// 因此即便上传者完全控制文件内容也无法升级为脚本执行。
 	encodedName := strings.ReplaceAll(url.QueryEscape(originalFilename), "+", "%20")
-	c.Set("Content-Disposition", "attachment; filename*=UTF-8''"+encodedName)
 	c.Set("X-Content-Type-Options", "nosniff")
-	c.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	if ctype, ok := inlineContentType(originalFilename); ok {
+		c.Set("Content-Type", ctype)
+		c.Set("Content-Disposition", "inline; filename*=UTF-8''"+encodedName)
+	} else {
+		c.Set("Content-Disposition", "attachment; filename*=UTF-8''"+encodedName)
+		c.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	}
 
 	return c.SendFile(filePath)
 }
@@ -465,6 +472,37 @@ func generateRandomPath() string {
 func isTextPreferred(c *fiber.Ctx) bool {
 	userAgent := c.Get("User-Agent")
 	return strings.HasPrefix(userAgent, "curl/") || strings.HasPrefix(userAgent, "Wget/")
+}
+
+// inlinePreviewTypes 把可安全内联预览的文件扩展名映射到规范 MIME 类型。
+// 自建白名单而不依赖系统 mime 表，确保判定确定且只放行惰性内容；
+// 故意不含 .html/.htm/.svg/.xml/.xhtml/.js 等可承载脚本的类型。
+var inlinePreviewTypes = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".avif": "image/avif",
+	".bmp":  "image/bmp",
+	".ico":  "image/x-icon",
+	".txt":  "text/plain; charset=utf-8",
+	".log":  "text/plain; charset=utf-8",
+	".md":   "text/plain; charset=utf-8",
+	".csv":  "text/plain; charset=utf-8",
+	".pdf":  "application/pdf",
+	".mp4":  "video/mp4",
+	".webm": "video/webm",
+	".ogg":  "audio/ogg",
+	".mp3":  "audio/mpeg",
+	".wav":  "audio/wav",
+}
+
+// inlineContentType 返回文件可内联预览时的规范 Content-Type；不在白名单内返回 false。
+func inlineContentType(filename string) (string, bool) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	ctype, ok := inlinePreviewTypes[ext]
+	return ctype, ok
 }
 
 func main() {
