@@ -12,6 +12,7 @@
     --success: #2f9e63;
     --border: #d9dce2;
     --code-bg: #eceef2;
+    --code-block-bg: #ffffff;
     --radius: 14px;
     --radius-s: 9px;
     --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
@@ -32,6 +33,7 @@
     --danger-hover: #f06b6f;
     --border: #2a2f37;
     --code-bg: #232830;
+    --code-block-bg: #20242b;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
@@ -424,7 +426,8 @@ body {
 }
 
 .shortcuts code {
-    background-color: var(--code-bg);
+    background-color: var(--code-block-bg);
+    border: 1px solid var(--border);
     padding: 9px 14px;
     border-radius: var(--radius-s);
     font-family: 'SF Mono', Menlo, Consolas, 'Roboto Mono', monospace;
