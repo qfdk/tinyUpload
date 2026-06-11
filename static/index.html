@@ -6,7 +6,7 @@
     <meta name="description" content="简单、安全的文件上传服务，支持拖拽上传和命令行操作">
     <meta name="theme-color" content="#1da1f2">
     <title>{{.ServerHost}} - 简单上传, Simple Is Beautiful</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M39 31 C35 36 31 38 25 41' fill='none' stroke='%239aa1ac' stroke-width='2' stroke-linecap='round' stroke-dasharray='3 3'/><g transform='rotate(-8 18 49)'><rect x='8' y='40' width='20' height='17' rx='2' fill='%23e8a94f'/><rect x='8' y='40' width='20' height='5.5' rx='2' fill='%23cf8f3b'/><rect x='16.6' y='40' width='2.8' height='17' fill='%23fff' opacity='0.85'/></g><path d='M58 7 L24 21 L37 26 Z' fill='%2342baf3'/><path d='M58 7 L37 26 L40 36 L45 28 Z' fill='%231a8cd8'/></svg>">
     <script>
         (function () {
             var theme;
@@ -32,7 +32,16 @@
 </div>
 <header class="site-header">
     <h1 class="site-title">
-        <span class="logo" aria-hidden="true">📦</span>
+        <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+            <path d="M39 31 C35 36 31 38 25 41" fill="none" stroke="#9aa1ac" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3"/>
+            <g transform="rotate(-8 18 49)">
+                <rect x="8" y="40" width="20" height="17" rx="2" fill="#e8a94f"/>
+                <rect x="8" y="40" width="20" height="5.5" rx="2" fill="#cf8f3b"/>
+                <rect x="16.6" y="40" width="2.8" height="17" fill="#fff" opacity="0.85"/>
+            </g>
+            <path d="M58 7 L24 21 L37 26 Z" fill="#42baf3"/>
+            <path d="M58 7 L37 26 L40 36 L45 28 Z" fill="#1a8cd8"/>
+        </svg>
         <span>{{.ServerHost}}</span>
     </h1>
     <p class="site-description" data-i18n="tagline">简单上传 · Simple Is Beautiful</p>
@@ -47,7 +56,7 @@
     <div class="panels-track" id="panelsTrack">
         <main class="upload-area" id="dropZone" aria-label="Upload">
             <div class="upload-icon" aria-hidden="true">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3v12"/>
                     <path d="m17 8-5-5-5 5"/>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
