@@ -713,7 +713,14 @@ body {
 /* ---- 响应式 ---- */
 @media (max-width: 600px) {
     body {
-        padding: 28px 14px 40px;
+        padding: 16px 14px 40px;
+    }
+
+    /* 固定悬浮会盖住居中标题，小屏改为流内右对齐 */
+    .top-controls {
+        position: static;
+        justify-content: flex-end;
+        margin-bottom: 14px;
     }
 
     .site-title {
