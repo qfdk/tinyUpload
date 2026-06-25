@@ -415,7 +415,7 @@ func (s *FileServer) cleanupExpiredFiles() error {
 	rows, err := s.db.Query(`
        SELECT path, encoded_filename, filename 
        FROM files 
-       WHERE upload_time < datetime('now', '-3 days')
+       WHERE upload_time < datetime('now', '-30 minutes')
    `)
 	if err != nil {
 		return fmt.Errorf("failed to query expired files: %v", err)
@@ -438,7 +438,7 @@ func (s *FileServer) cleanupExpiredFiles() error {
 		os.Remove(dirPath)
 	}
 
-	_, err = s.db.Exec(`DELETE FROM files WHERE upload_time < datetime('now', '-3 days')`)
+	_, err = s.db.Exec(`DELETE FROM files WHERE upload_time < datetime('now', '-30 minutes')`)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired records: %v", err)
 	}
