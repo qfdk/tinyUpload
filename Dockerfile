@@ -35,7 +35,7 @@ RUN apk add --no-cache sqlite-libs ca-certificates tzdata
 
 # 展示给用户的时间（Server Time / Expires / uploadTime）按此时区格式化；
 # 数据库内部的过期判定用 SQLite 的 UTC 时钟，与此无关。
-ENV TZ=Europe/Berlin
+ENV TZ=Europe/Paris
 
 # 创建用户和必要目录
 RUN adduser -D -u 1000 appuser
