@@ -42,7 +42,7 @@ const I18N = {
         copied: '复制成功！',
         copyFailed: '复制失败',
         linkCopied: '链接已自动复制',
-        retention: '文件保存 30 分钟后自动删除',
+        retention: '文件保存 1 小时后自动删除',
     },
     en: {
         siteTitle: 'Simple Upload',
@@ -81,7 +81,7 @@ const I18N = {
         copied: 'Copied!',
         copyFailed: 'Copy failed',
         linkCopied: 'Link copied to clipboard',
-        retention: 'Files are deleted automatically after 30 minutes',
+        retention: 'Files are deleted automatically after 1 hour',
     },
     fr: {
         siteTitle: 'Envoi simple',
@@ -120,7 +120,7 @@ const I18N = {
         copied: 'Copié !',
         copyFailed: 'Échec de la copie',
         linkCopied: 'Lien copié automatiquement',
-        retention: 'Les fichiers sont supprimés automatiquement après 30 minutes',
+        retention: 'Les fichiers sont supprimés automatiquement après 1 heure',
     },
 };
 

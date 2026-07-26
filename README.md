@@ -17,11 +17,12 @@
 **命令行**
 - `curl -T` 直接上传，无需任何客户端
 - 管道上传（`curl -T -`）自动生成随机文件名，按 Content-Type 补全后缀
+- `?t=` 自定义保留时长（默认 1 小时，最长 3 天），`?n=` 限制下载次数（阅后即焚）
 - 公网访问时返回的分享链接强制 HTTPS
 
 **服务端**
 - 随机 8 位路径 + 8 位删除码，同一地址用 HTTP 方法区分下载/删除
-- 文件保存 30 分钟后自动清理
+- 文件默认保存 1 小时后自动清理，可上传时调整（最长 3 天）；到期或下载次数用完立即失效
 - 流式写盘，单文件上限 512MB，无内存峰值
 - 纯文本/图片/PDF/音视频等惰性类型浏览器内联预览，可执行类型强制下载并加 CSP 沙箱
 - 静态资源版本号随进程启动更新，部署后浏览器缓存自动失效
@@ -62,6 +63,13 @@ curl -T 文件名 localhost:8080/新文件名
 # 管道上传（自动生成随机文件名）
 echo "hello" | curl -T - localhost:8080 -H "Content-Type: text/plain"
 
+# 上传选项：t = 保留时长（裸数字按天，支持 m/h/d 后缀，默认 1 小时，最长 3 天）
+#           n = 下载次数上限（用完即失效，默认不限）
+curl -T 文件名 "localhost:8080/?t=3"        # 保留 3 天
+curl -T 文件名 "localhost:8080/?t=12h"      # 保留 12 小时
+curl -T 文件名 "localhost:8080/?n=1"        # 阅后即焚
+curl -T 文件名 "localhost:8080/?t=1h&n=5"   # 组合使用,先满足哪个文件即失效
+
 # 下载
 curl -O http://localhost:8080/xxxx/文件名
 
@@ -73,7 +81,7 @@ curl -X DELETE "http://localhost:8080/xxxx/文件名?code=删除码"
 
 | 操作 | 接口 | 说明 |
 |---|---|---|
-| 上传 | `PUT /` 或 `PUT /:filename` | 浏览器客户端返回 JSON，curl/wget 返回纯文本 |
+| 上传 | `PUT /` 或 `PUT /:filename` | 可选 `?t=`（保留时长）、`?n=`（下载次数）；浏览器客户端返回 JSON，curl/wget 返回纯文本 |
 | 下载 | `GET /:path/:filename` | 白名单类型内联预览，其余强制下载 |
 | 删除 | `DELETE /:path/:filename` | 删除码经 `?code=` 查询参数或 `X-Delete-Code` 头 |
 
@@ -81,7 +89,7 @@ curl -X DELETE "http://localhost:8080/xxxx/文件名?code=删除码"
 
 - 文件存储在 `data/uploads/`，按随机路径分目录
 - 元数据存于 SQLite（`data/files.db`），含下载计数
-- 上传超过 30 分钟的文件由后台任务自动删除
+- 到期（默认 1 小时，可用 `?t=` 调整，最长 3 天）或下载次数用完的文件由后台任务自动删除，访问层同时实时拦截
 - Docker 部署时通过 volume 持久化 `data/`
 
 ## 安全说明

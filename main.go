@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,12 @@ import (
 // maxUploadSize 是单次上传写盘上限。StreamRequestBody=true 时 fasthttp 不再用
 // BodyLimit 约束流式 body，必须在 io.Copy 处手动强制，否则可被无界磁盘写入 DoS。
 const maxUploadSize = 512 * 1024 * 1024
+
+// maxRetention 是文件最长保留时间，?l= 超过一律按此截断。
+const maxRetention = 72 * time.Hour
+
+// defaultRetention 是不带 ?t= 时的默认保留时长（网页与 curl 一致，前端文案同步此值）。
+const defaultRetention = time.Hour
 
 // assetVersion 以进程启动时间作为静态资源版本号，部署重启后自动失效浏览器缓存，
 // 避免新 HTML 配旧 JS/CSS 的混搭（曾导致 i18n 键名裸显示）。
@@ -61,11 +68,24 @@ func NewFileServer() (*FileServer, error) {
            file_size INTEGER NOT NULL,
            mime_type TEXT,
            download_count INTEGER DEFAULT 0,
+           expire_time DATETIME,
+           max_downloads INTEGER,
            UNIQUE(path, encoded_filename)
        )
    `)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create table: %v", err)
+	}
+
+	// 旧库迁移：已存在的表补上新列。SQLite 的 ADD COLUMN 不支持 IF NOT EXISTS，
+	// 列已存在时报 duplicate column，忽略即可。
+	for _, col := range []string{
+		`ALTER TABLE files ADD COLUMN expire_time DATETIME`,
+		`ALTER TABLE files ADD COLUMN max_downloads INTEGER`,
+	} {
+		if _, err := db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return nil, fmt.Errorf("failed to migrate table: %v", err)
+		}
 	}
 
 	app := fiber.New(fiber.Config{
@@ -132,6 +152,11 @@ Upload File:
  curl -T filename %s
  curl -T filename %s/new_filename
 
+Upload Options (default: kept 1 hour, unlimited downloads):
+ curl -T filename "%s/?t=3"        # keep 3 days (also 30m / 12h / 2d, max 3d)
+ curl -T filename "%s/?n=1"        # burn after 1 download
+ curl -T filename "%s/?t=12h&n=5"  # combine both (whichever hits first)
+
 Download File:
  curl -O %s/xxxx/filename
  wget %s/xxxx/filename
@@ -140,7 +165,7 @@ Delete File:
  curl -X DELETE "%s/xxxx/filename?code=delete_code"
 
 Server Time: %s
-`, host, host, host, host, host, now))
+`, host, host, host, host, host, host, host, host, now))
 	}
 	// c.Render 无 Views 引擎时回退到 text/template（不做 HTML 转义），而 c.Hostname()
 	// 在受信代理下会返回攻击者可控的 X-Forwarded-Host。必须显式转义，防止反射型 XSS。
@@ -182,6 +207,21 @@ func shareProtocol(proto, host string) string {
 }
 
 func (s *FileServer) handleUpload(c *fiber.Ctx) error {
+	// 先校验参数再收流，参数错了不浪费磁盘写入。
+	// t = 保留时长（裸数字按天，支持 m/h/d 后缀），n = 下载次数上限（用完即失效）。
+	retention, err := parseExpires(c.Query("t"))
+	if err != nil {
+		return c.Status(400).SendString("Invalid t parameter (retention: e.g. 1, 3, 30m, 12h, 2d; max 3d)")
+	}
+	maxDownloads := 0
+	if v := c.Query("n"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			return c.Status(400).SendString("Invalid n parameter (max downloads: positive integer)")
+		}
+		maxDownloads = n
+	}
+
 	filename := c.Params("filename")
 	decodedFilename, err := url.QueryUnescape(filename)
 	if err != nil {
@@ -258,15 +298,27 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 
 	deleteCode := generateRandomString(8)
 
+	// 过期时间用 SQLite 的 'now' 计算，与 upload_time、清理任务同一时钟源（UTC）
+	expireModifier := fmt.Sprintf("+%d seconds", int(retention.Seconds()))
+	var maxDownloadsVal interface{}
+	if maxDownloads > 0 {
+		maxDownloadsVal = maxDownloads
+	}
 	_, err = s.db.Exec(`
-       INSERT INTO files (path, filename, encoded_filename, delete_code, upload_time, file_size, mime_type)
-       VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
-   `, path, decodedFilename, encodedFilename, deleteCode, fileSize, mimeType)
+       INSERT INTO files (path, filename, encoded_filename, delete_code, upload_time, file_size, mime_type, expire_time, max_downloads)
+       VALUES (?, ?, ?, ?, datetime('now'), ?, ?, datetime('now', ?), ?)
+   `, path, decodedFilename, encodedFilename, deleteCode, fileSize, mimeType, expireModifier, maxDownloadsVal)
 
 	if err != nil {
 		os.Remove(filePath)
 		os.Remove(dirPath)
 		return c.Status(500).SendString("Failed to save file information")
+	}
+
+	expireAt := time.Now().Add(retention).Format("2006-01-02 15:04:05")
+	downloadsNote := "unlimited"
+	if maxDownloads > 0 {
+		downloadsNote = strconv.Itoa(maxDownloads)
 	}
 
 	if isTextPreferred(c) {
@@ -277,6 +329,8 @@ Access URL: %s://%s/%s/%s
 Delete Code: %s
 Size: %d bytes
 Type: %s
+Expires: %s
+Max Downloads: %s
 
 Delete Command:
 curl -X DELETE "%s://%s/%s/%s?code=%s"
@@ -285,17 +339,20 @@ curl -X DELETE "%s://%s/%s/%s?code=%s"
 			proto, c.Hostname(), path, encodedFilename,
 			deleteCode,
 			fileSize, mimeType,
+			expireAt, downloadsNote,
 			proto, c.Hostname(), path, encodedFilename, deleteCode,
 		))
 	}
 
 	return c.JSON(fiber.Map{
-		"path":       path,
-		"filename":   decodedFilename,
-		"deleteCode": deleteCode,
-		"size":       fileSize,
-		"mimeType":   mimeType,
-		"uploadTime": time.Now().Format("2006-01-02 15:04:05"),
+		"path":         path,
+		"filename":     decodedFilename,
+		"deleteCode":   deleteCode,
+		"size":         fileSize,
+		"mimeType":     mimeType,
+		"uploadTime":   time.Now().Format("2006-01-02 15:04:05"),
+		"expireTime":   expireAt,
+		"maxDownloads": maxDownloads,
 	})
 }
 
@@ -316,9 +373,14 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 
 	encodedRequestFilename := url.QueryEscape(decodedRequestFilename)
 
+	// 过期文件立刻不可访问，不等每小时的清理任务；
+	// 历史数据 expire_time 为 NULL 时按 upload_time + 3 天兜底。
 	var originalFilename string
-	err = s.db.QueryRow("SELECT filename FROM files WHERE path = ? AND encoded_filename = ?",
-		path, encodedRequestFilename).Scan(&originalFilename)
+	err = s.db.QueryRow(`
+       SELECT filename FROM files
+       WHERE path = ? AND encoded_filename = ?
+         AND COALESCE(expire_time, datetime(upload_time, '+3 days')) > datetime('now')
+   `, path, encodedRequestFilename).Scan(&originalFilename)
 	if err != nil {
 		return c.Status(404).SendString("File not found")
 	}
@@ -328,10 +390,18 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 		return c.Status(404).SendString("File not found")
 	}
 
-	_, err = s.db.Exec("UPDATE files SET download_count = download_count + 1 WHERE path = ? AND encoded_filename = ?",
-		path, encodedRequestFilename)
+	// 计数与次数上限在同一条 UPDATE 里原子完成，并发下载不会超发；
+	// 没抢到名额（RowsAffected=0）说明次数已用完，文件交给清理任务删除。
+	res, err := s.db.Exec(`
+       UPDATE files SET download_count = download_count + 1
+       WHERE path = ? AND encoded_filename = ?
+         AND (max_downloads IS NULL OR download_count < max_downloads)
+   `, path, encodedRequestFilename)
 	if err != nil {
-		log.Printf("Error updating download count: %v", err)
+		return c.Status(500).SendString("Internal server error")
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return c.Status(404).SendString("File not found")
 	}
 
 	// 默认禁止 MIME 嗅探；只有白名单内的惰性类型（图片/纯文本/PDF/音视频）允许
@@ -411,12 +481,18 @@ func (s *FileServer) handleDelete(c *fiber.Ctx) error {
 	return c.Status(200).SendString("OK")
 }
 
+// expiredCondition 判定记录已失效：过期时间已到（历史 NULL 数据按 upload_time + 3 天
+// 兜底），或下载次数已用完。下载/清理共用同一语义。
+const expiredCondition = `
+       COALESCE(expire_time, datetime(upload_time, '+3 days')) < datetime('now')
+       OR (max_downloads IS NOT NULL AND download_count >= max_downloads)
+`
+
 func (s *FileServer) cleanupExpiredFiles() error {
 	rows, err := s.db.Query(`
-       SELECT path, encoded_filename, filename 
-       FROM files 
-       WHERE upload_time < datetime('now', '-30 minutes')
-   `)
+       SELECT path, encoded_filename, filename
+       FROM files
+       WHERE ` + expiredCondition)
 	if err != nil {
 		return fmt.Errorf("failed to query expired files: %v", err)
 	}
@@ -438,7 +514,7 @@ func (s *FileServer) cleanupExpiredFiles() error {
 		os.Remove(dirPath)
 	}
 
-	_, err = s.db.Exec(`DELETE FROM files WHERE upload_time < datetime('now', '-30 minutes')`)
+	_, err = s.db.Exec(`DELETE FROM files WHERE ` + expiredCondition)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired records: %v", err)
 	}
@@ -495,6 +571,35 @@ func sanitizeFilename(filename string) string {
 	}
 
 	return result
+}
+
+// parseExpires 解析上传参数 t（保留时长）：裸数字按天（t=2 即 2 天），
+// 也接受 m/h/d 单位后缀（t=30m、t=12h、t=2d）。空串返回默认 defaultRetention；
+// 超过上限按 maxRetention 截断；零、负数或无法解析的格式报错。
+func parseExpires(s string) (time.Duration, error) {
+	if s == "" {
+		return defaultRetention, nil
+	}
+
+	num, unit := s, time.Duration(24)*time.Hour
+	switch s[len(s)-1] {
+	case 'm':
+		num, unit = s[:len(s)-1], time.Minute
+	case 'h':
+		num, unit = s[:len(s)-1], time.Hour
+	case 'd':
+		num, unit = s[:len(s)-1], 24*time.Hour
+	}
+
+	n, err := strconv.Atoi(num)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("invalid retention %q", s)
+	}
+	d := time.Duration(n) * unit
+	if d > maxRetention {
+		d = maxRetention
+	}
+	return d, nil
 }
 
 func generateRandomString(length int) string {
