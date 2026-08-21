@@ -403,7 +403,7 @@ class TinyUpload {
     }
 
     validateFiles(files) {
-        const maxSize = 1024 * 1024 * 1024; // 1GB
+        const maxSize = 8 * 1024 * 1024 * 1024; // 8GB
         const validFiles = [];
 
         for (const file of files) {

@@ -25,7 +25,7 @@ import (
 
 // maxUploadSize 是单次上传写盘上限。StreamRequestBody=true 时 fasthttp 不再用
 // BodyLimit 约束流式 body，必须在 io.Copy 处手动强制，否则可被无界磁盘写入 DoS。
-const maxUploadSize = 1024 * 1024 * 1024
+const maxUploadSize = 8 * 1024 * 1024 * 1024
 
 // maxRetention 是文件最长保留时间，?l= 超过一律按此截断。
 const maxRetention = 72 * time.Hour
@@ -94,9 +94,10 @@ func NewFileServer() (*FileServer, error) {
 		BodyLimit:               maxUploadSize,
 		StreamRequestBody:       true,
 		// StreamRequestBody 下 ReadTimeout 覆盖整个请求体的读取，WriteTimeout 覆盖整个
-		// 响应体的写出。1GB 文件在慢速链路上传/下载需要数分钟，30s 会中途掐断连接。
-		ReadTimeout:             15 * time.Minute,
-		WriteTimeout:            15 * time.Minute,
+		// 响应体的写出。nginx 已关请求缓冲（proxy_request_buffering off），8GB 在
+		// 5Mbps 链路上约需 3.6 小时，按 4h 兜底。
+		ReadTimeout:             4 * time.Hour,
+		WriteTimeout:            4 * time.Hour,
 		IdleTimeout:             60 * time.Second,
 		ProxyHeader:             "X-Real-IP",
 		EnableTrustedProxyCheck: true,
