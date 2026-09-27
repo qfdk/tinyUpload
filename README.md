@@ -102,3 +102,9 @@ curl -X DELETE "http://localhost:8080/xxxx/文件名?code=删除码"
 ## 许可证
 
 [GNU General Public License v3.0](LICENSE)（GPL-3.0）——衍生作品须以相同许可证开源。
+
+## 赞助
+
+<a href="https://voilapro.app/?ref=github-tinyupload"><img src="https://voilapro.app/images/icon.png" alt="Voilà Pro" width="160"/></a>
+
+本项目由 [Voilà Pro](https://voilapro.app/?ref=github-tinyupload) 赞助支持 —— macOS 语音输入工具。按住快捷键说话，文字直接落到光标处，中英法混说也能识别。
