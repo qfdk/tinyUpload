@@ -248,18 +248,41 @@ func shareProtocol(proto, host string) string {
 	return "https"
 }
 
+// rejectLinger 是拒绝上传之后继续接收并丢弃对端数据的最长时间。
+const rejectLinger = 5 * time.Second
+
+// rejectUpload 在请求体还没读完时拒绝一次上传，并保证对端读得到这条响应。
+//
+// 此时客户端多半还在发送请求体。回完响应就直接关闭连接的话，内核会回 RST，对端先撞上
+// 发送失败，读不到拒绝原因（curl 报 Send failure，反向代理报 502）。所以分步关闭：
+// 响应发出后只关闭写方向，继续把对端发来的数据丢弃一小段时间，等它收到响应自己停下。
+func rejectUpload(c *fiber.Ctx, status int, msg string) error {
+	c.Context().Hijack(func(conn net.Conn) {
+		raw := conn
+		if u, ok := conn.(interface{ UnsafeConn() net.Conn }); ok {
+			raw = u.UnsafeConn()
+		}
+		if w, ok := raw.(interface{ CloseWrite() error }); ok {
+			w.CloseWrite()
+		}
+		conn.SetReadDeadline(time.Now().Add(rejectLinger))
+		io.Copy(io.Discard, conn)
+	})
+	return c.Status(status).SendString(msg)
+}
+
 func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	// 先校验参数再收流，参数错了不浪费磁盘写入。
 	// t = 保留时长（裸数字按天，支持 m/h/d 后缀），n = 下载次数上限（用完即失效）。
 	retention, err := parseExpires(c.Query("t"))
 	if err != nil {
-		return c.Status(400).SendString("Invalid t parameter (retention: e.g. 1, 3, 30m, 12h, 2d; max 3d)")
+		return rejectUpload(c, 400, "Invalid t parameter (retention: e.g. 1, 3, 30m, 12h, 2d; max 3d)")
 	}
 	maxDownloads := 0
 	if v := c.Query("n"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
-			return c.Status(400).SendString("Invalid n parameter (max downloads: positive integer)")
+			return rejectUpload(c, 400, "Invalid n parameter (max downloads: positive integer)")
 		}
 		maxDownloads = n
 	}
@@ -267,7 +290,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	filename := c.Params("filename")
 	decodedFilename, err := url.QueryUnescape(filename)
 	if err != nil {
-		return c.Status(400).SendString("Invalid filename")
+		return rejectUpload(c, 400, "Invalid filename")
 	}
 
 	if decodedFilename == "" {
@@ -288,7 +311,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	// 清理文件名以防止路径遍历攻击
 	decodedFilename = sanitizeFilename(decodedFilename)
 	if decodedFilename == "" {
-		return c.Status(400).SendString("Invalid filename after sanitization")
+		return rejectUpload(c, 400, "Invalid filename after sanitization")
 	}
 
 	// 既无 Content-Length 也非 chunked 的 PUT（如 `curl -X PUT host/x`）没有请求体流。
@@ -301,7 +324,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	path := generateRandomPath()
 	dirPath := filepath.Join(s.uploadDir, path)
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return c.Status(500).SendString("Failed to create directory")
+		return rejectUpload(c, 500, "Failed to create directory")
 	}
 
 	encodedFilename := url.QueryEscape(decodedFilename)
@@ -310,7 +333,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	out, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		os.Remove(dirPath)
-		return c.Status(500).SendString("Failed to save file")
+		return rejectUpload(c, 500, "Failed to save file")
 	}
 
 	// 流式写盘，避免将整个请求体读入内存（大文件并发会导致 OOM）。
@@ -324,12 +347,12 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	if copyErr != nil {
 		os.Remove(filePath)
 		os.Remove(dirPath)
-		return c.Status(500).SendString("Failed to save file")
+		return rejectUpload(c, 500, "Failed to save file")
 	}
 	if fileSize > maxUploadSize {
 		os.Remove(filePath)
 		os.Remove(dirPath)
-		return c.Status(413).SendString("File too large")
+		return rejectUpload(c, 413, "File too large")
 	}
 	if fileSize == 0 {
 		os.Remove(filePath)

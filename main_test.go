@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -766,5 +769,49 @@ func TestPanicInHandlerDoesNotKillServer(t *testing.T) {
 	path := putFile(t, s, "/after.txt", "still alive")
 	if _, body := getFile(t, s, "/"+path+"/after.txt", nil); body != "still alive" {
 		t.Errorf("download after a handler panic = %q, want %q", body, "still alive")
+	}
+}
+
+// TestRejectedUploadReachesClientStillSending：上传被提前拒绝时，客户端多半还在发送请求体。
+// 服务端不能回完响应就立刻断开连接，否则客户端（或反向代理）会先撞上发送失败，
+// 读不到拒绝原因；经反向代理时表现为 502。
+func TestRejectedUploadReachesClientStillSending(t *testing.T) {
+	s := newTestServer(t)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go s.app.Listener(ln) //nolint:errcheck
+	t.Cleanup(func() { s.app.Shutdown() })
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// 请求体远大于内核缓冲区：服务端不接收的话，客户端发不完
+	const bodySize = 64 << 20
+	if _, err := fmt.Fprintf(conn, "PUT /big.bin?t=1w HTTP/1.1\r\nHost: test\r\nContent-Length: %d\r\n\r\n", bodySize); err != nil {
+		t.Fatal(err)
+	}
+	chunk := make([]byte, 64<<10)
+	for sent := 0; sent < bodySize; sent += len(chunk) {
+		if _, err := conn.Write(chunk); err != nil {
+			t.Fatalf("connection torn down after %d bytes while the client was still sending: %v", sent, err)
+		}
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("could not read the rejection: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 400 || !strings.Contains(string(body), "Invalid t parameter") {
+		t.Errorf("rejection = %d %q, want 400 with the reason", resp.StatusCode, body)
 	}
 }
