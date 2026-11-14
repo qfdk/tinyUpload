@@ -22,7 +22,7 @@ docker build -t tiny-upload:new .
 echo "Starting new container for testing..."
 docker run -d \
    --name tiny-upload-new \
-   -p 3081:8080 \
+   -p 127.0.0.1:3081:8080 \
    -v /data/tinyUpload:/app/data \
    tiny-upload:new
 
@@ -42,7 +42,7 @@ if docker ps | grep tiny-upload-new > /dev/null; then
    echo "Starting main service with new version..."
    docker run -d \
        --name tiny-upload \
-       -p 3080:8080 \
+       -p 127.0.0.1:3080:8080 \
        -v /data/tinyUpload:/app/data \
        --restart=unless-stopped \
        tiny-upload:new
