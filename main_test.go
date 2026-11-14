@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 func TestInlineContentType_Whitelist(t *testing.T) {
@@ -238,8 +240,8 @@ func TestParseExpires(t *testing.T) {
 	}
 }
 
-// newTestServer 在临时目录里启动一个带路由的 FileServer。
-func newTestServer(t *testing.T) *FileServer {
+// newBareTestServer 在临时目录里创建一个还没注册路由的 FileServer。
+func newBareTestServer(t *testing.T) *FileServer {
 	t.Helper()
 	oldWd, err := os.Getwd()
 	if err != nil {
@@ -255,6 +257,13 @@ func newTestServer(t *testing.T) *FileServer {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.db.Close() })
+	return s
+}
+
+// newTestServer 在临时目录里启动一个带路由的 FileServer。
+func newTestServer(t *testing.T) *FileServer {
+	t.Helper()
+	s := newBareTestServer(t)
 	s.setupRoutes()
 	return s
 }
@@ -735,5 +744,27 @@ func TestCleanupKeepsRecordWhenFileCannotBeRemoved(t *testing.T) {
 	}
 	if recordCount(t, s, path) != 0 {
 		t.Errorf("record still in db after the file became removable")
+	}
+}
+
+// TestPanicInHandlerDoesNotKillServer：处理函数里的 panic 只应让这一个请求失败，
+// 不能让整个进程退出、掐断其他人正在进行的传输。
+func TestPanicInHandlerDoesNotKillServer(t *testing.T) {
+	s := newBareTestServer(t)
+	s.app.Get("/boom", func(c *fiber.Ctx) error { panic("boom") })
+	s.setupRoutes()
+
+	resp, err := s.app.Test(httptest.NewRequest("GET", "/boom", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 500 {
+		t.Errorf("request hitting a panicking handler: status = %d, want 500", resp.StatusCode)
+	}
+
+	// 服务仍然可用
+	path := putFile(t, s, "/after.txt", "still alive")
+	if _, body := getFile(t, s, "/"+path+"/after.txt", nil); body != "still alive" {
+		t.Errorf("download after a handler panic = %q, want %q", body, "still alive")
 	}
 }

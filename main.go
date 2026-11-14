@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	recovermw "github.com/gofiber/fiber/v2/middleware/recover"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/valyala/fasthttp"
 )
@@ -110,9 +112,19 @@ func NewFileServer() (*FileServer, error) {
 		TrustedProxies:          []string{"127.0.0.1", "::1", "172.17.0.1", "192.168.1.8"},
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			log.Printf("Error: %v", err)
-			return c.Redirect("/", 302)
+			// fiber 自己报的 HTTP 错误（请求格式不对等）回首页；其余都是服务端内部错误，
+			// 包括 recover 中间件接住的 panic。
+			var httpErr *fiber.Error
+			if errors.As(err, &httpErr) {
+				return c.Redirect("/", 302)
+			}
+			return c.Status(500).SendString("Internal server error")
 		},
 	})
+
+	// 处理函数里的 panic 只让当前请求失败并把堆栈打进日志，不让整个进程退出、
+	// 掐断其他人正在进行的传输。放在最外层，后面的中间件出问题也能接住。
+	app.Use(recovermw.New(recovermw.Config{EnableStackTrace: true}))
 
 	app.Use(logger.New(logger.Config{
 		Next: func(c *fiber.Ctx) bool {
