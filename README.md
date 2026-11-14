@@ -42,7 +42,7 @@ docker run -d \
 
 ### 手动构建
 
-需求：Go 1.22+、SQLite3（CGO）
+需求：Go 1.26+、SQLite3（CGO）
 
 ```bash
 git clone https://github.com/qfdk/tinyUpload

@@ -17,7 +17,7 @@ RUN npm install -g html-minifier-terser && \
     < ./static/index.html > ./static/index.min.html
 
 # 第二阶段：Go 编译
-FROM golang:1.22-alpine AS builder
+FROM golang:1.27-alpine AS builder
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 
 WORKDIR /build
