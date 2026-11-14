@@ -533,9 +533,12 @@ const expiredCondition = `
        OR (max_downloads IS NOT NULL AND download_count >= max_downloads)
 `
 
+// cleanupExpiredFiles 删除已失效的文件及其记录。记录在对应文件删掉之后按 id 逐条删除，
+// 不按过期条件批量删：批量删会把查询之后才失效的文件、以及没删掉的文件的记录一并带走，
+// 文件却留在磁盘上，此后再没有任何东西会去清理它们。
 func (s *FileServer) cleanupExpiredFiles() error {
 	rows, err := s.db.Query(`
-       SELECT path, encoded_filename, filename
+       SELECT id, path, filename
        FROM files
        WHERE ` + expiredCondition)
 	if err != nil {
@@ -543,25 +546,34 @@ func (s *FileServer) cleanupExpiredFiles() error {
 	}
 	defer rows.Close()
 
+	type expiredFile struct {
+		id             int64
+		path, filename string
+	}
+	var expired []expiredFile
 	for rows.Next() {
-		var path, encodedFilename, filename string
-		if err := rows.Scan(&path, &encodedFilename, &filename); err != nil {
+		var f expiredFile
+		if err := rows.Scan(&f.id, &f.path, &f.filename); err != nil {
 			log.Printf("Failed to read file record: %v", err)
 			continue
 		}
-
-		filePath := filepath.Join(s.uploadDir, path, filename)
-		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-			log.Printf("Failed to delete file %s: %v", filePath, err)
-		}
-
-		dirPath := filepath.Join(s.uploadDir, path)
-		os.Remove(dirPath)
+		expired = append(expired, f)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed to read expired files: %v", err)
 	}
 
-	_, err = s.db.Exec(`DELETE FROM files WHERE ` + expiredCondition)
-	if err != nil {
-		return fmt.Errorf("failed to delete expired records: %v", err)
+	for _, f := range expired {
+		filePath := filepath.Join(s.uploadDir, f.path, f.filename)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			log.Printf("Failed to delete file %s: %v", filePath, err)
+			continue
+		}
+		os.Remove(filepath.Join(s.uploadDir, f.path))
+
+		if _, err := s.db.Exec(`DELETE FROM files WHERE id = ?`, f.id); err != nil {
+			return fmt.Errorf("failed to delete expired record: %v", err)
+		}
 	}
 
 	return nil

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -606,5 +607,133 @@ func TestUploadMultipartBodyStoredRaw(t *testing.T) {
 
 	if _, body := getFile(t, s, "/"+r.Path+"/form.bin", nil); body != raw {
 		t.Errorf("stored multipart upload = %q, want the raw request body %q", body, raw)
+	}
+}
+
+// recordCount 返回随机路径 path 下还有几条文件记录。
+func recordCount(t *testing.T, s *FileServer, path string) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM files WHERE path = ?`, path).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// expireNow 把随机路径 path 下的文件改成已过期。
+func expireNow(t *testing.T, exec func(query string, args ...any) error, path string) {
+	t.Helper()
+	if err := exec(`UPDATE files SET expire_time = datetime('now', '-1 minute') WHERE path = ?`, path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCleanupDoesNotOrphanFilesExpiringMidRun：清理任务查询之后才过期的文件，这一轮不会去删它，
+// 那它的记录也不能删。丢了记录，文件就永远留在磁盘上，再没有任何东西会去清理。
+func TestCleanupDoesNotOrphanFilesExpiringMidRun(t *testing.T) {
+	s := newTestServer(t)
+	dbExec := func(query string, args ...any) error {
+		_, err := s.db.Exec(query, args...)
+		return err
+	}
+
+	expiredPath := putFile(t, s, "/expired.txt", "a")
+	livePath := putFile(t, s, "/live.txt", "b")
+	liveFile := "data/uploads/" + livePath + "/live.txt"
+	expireNow(t, dbExec, expiredPath)
+
+	// 持有写锁：清理任务能查询、能删文件，但写库时会等在这里
+	ctx := context.Background()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	connExec := func(query string, args ...any) error {
+		_, err := conn.ExecContext(ctx, query, args...)
+		return err
+	}
+	if err := connExec("BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- s.cleanupExpiredFiles() }()
+
+	// expired.txt 从磁盘上消失，说明清理任务已经查询完毕，正等着写库
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat("data/uploads/" + expiredPath + "/expired.txt"); os.IsNotExist(err) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("cleanup did not remove expired.txt in time")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// 就在这个空档里 live.txt 过期了，然后放行
+	expireNow(t, connExec, livePath)
+	if err := connExec("COMMIT"); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(liveFile); err != nil {
+		t.Fatalf("live.txt should still be on disk after the first run: %v", err)
+	}
+	if recordCount(t, s, livePath) != 1 {
+		t.Fatal("record of live.txt was deleted while its file is still on disk: the file is orphaned")
+	}
+
+	// 下一轮把它的文件和记录一起清掉
+	if err := s.cleanupExpiredFiles(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(liveFile); !os.IsNotExist(err) {
+		t.Errorf("live.txt still on disk after the second cleanup run")
+	}
+	if recordCount(t, s, livePath) != 0 {
+		t.Errorf("record of live.txt still in db after the second cleanup run")
+	}
+}
+
+// TestCleanupKeepsRecordWhenFileCannotBeRemoved：文件删不掉时记录要留着，下一轮还能再试。
+func TestCleanupKeepsRecordWhenFileCannotBeRemoved(t *testing.T) {
+	s := newTestServer(t)
+
+	path := putFile(t, s, "/stuck.txt", "a")
+	expireNow(t, func(query string, args ...any) error {
+		_, err := s.db.Exec(query, args...)
+		return err
+	}, path)
+
+	// 把文件换成非空目录，os.Remove 会失败
+	file := "data/uploads/" + path + "/stuck.txt"
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(file+"/child", 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.cleanupExpiredFiles(); err != nil {
+		t.Fatal(err)
+	}
+	if recordCount(t, s, path) != 1 {
+		t.Fatal("record was deleted although its file could not be removed")
+	}
+
+	// 障碍消失后，下一轮正常清掉
+	if err := os.Remove(file + "/child"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.cleanupExpiredFiles(); err != nil {
+		t.Fatal(err)
+	}
+	if recordCount(t, s, path) != 0 {
+		t.Errorf("record still in db after the file became removable")
 	}
 }
