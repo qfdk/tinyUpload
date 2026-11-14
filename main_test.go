@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -463,5 +466,103 @@ func TestCleanupDownloadLimitReached(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("limit-reached record still in db after cleanup")
+	}
+}
+
+// putFile 以原始字节流上传 body，返回服务端分配的随机路径。target 原样写进请求行。
+func putFile(t *testing.T, s *FileServer, target, body string) string {
+	t.Helper()
+	resp, err := s.app.Test(httptest.NewRequest("PUT", target, strings.NewReader(body)), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT %s status = %d, want 200", target, resp.StatusCode)
+	}
+	var r struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		t.Fatal(err)
+	}
+	return r.Path
+}
+
+// getFile 请求 target（可附加请求头），返回响应与响应体。
+func getFile(t *testing.T, s *FileServer, target string, header http.Header) (*http.Response, string) {
+	t.Helper()
+	req := httptest.NewRequest("GET", target, nil)
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	resp, err := s.app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp, string(body)
+}
+
+// TestDownloadDoesNotDecodeStoredFilename 是任意文件读取漏洞的回归测试：
+// 文件名字面量里的 %2e%2e%2f 在下载时不得被解码成 ../，否则上传者起个名字
+// 就能读到别人的文件、data/files.db（全站路径与删除码）乃至上传目录外的任意文件。
+func TestDownloadDoesNotDecodeStoredFilename(t *testing.T) {
+	s := newTestServer(t)
+
+	victimPath := putFile(t, s, "/secret.txt", "TOP-SECRET")
+
+	for _, name := range []string{
+		"%2e%2e%2f" + victimPath + "%2fsecret.txt", // 解码后指向受害者的文件
+		"%2e%2e%2f%2e%2e%2ffiles.db",               // 解码后指向 data/files.db
+	} {
+		// 请求行里再编码一层，服务端解码一次后落盘文件名就是上面的字面量
+		target := "/" + url.QueryEscape(name)
+		path := putFile(t, s, target, "attacker-own-bytes")
+
+		resp, body := getFile(t, s, "/"+path+target, nil)
+		if resp.StatusCode != 200 || body != "attacker-own-bytes" {
+			t.Errorf("download of file literally named %q: status = %d, body starts %.20q; want 200 with the file's own content",
+				name, resp.StatusCode, body)
+		}
+	}
+}
+
+// TestDownloadSpecialCharFilenames：文件名里的 # 与 % 是普通字符，上传后必须能原样下载回来。
+func TestDownloadSpecialCharFilenames(t *testing.T) {
+	s := newTestServer(t)
+
+	for _, name := range []string{"issue #12.txt", "report 100%25.txt", "a%41b.txt", "50% off.txt"} {
+		target := "/" + url.QueryEscape(name)
+		path := putFile(t, s, target, "content of "+name)
+
+		resp, body := getFile(t, s, "/"+path+target, nil)
+		if resp.StatusCode != 200 || body != "content of "+name {
+			t.Errorf("download of %q: status = %d, body = %q; want 200 with the uploaded content", name, resp.StatusCode, body)
+		}
+	}
+}
+
+// TestDownloadRangeAndNoCompression 锁定下载的两个既有行为：支持 Range（断点续传、
+// 视频拖动），以及文件内容不经 compress 中间件压缩（否则丢失 Content-Length 与 Range）。
+func TestDownloadRangeAndNoCompression(t *testing.T) {
+	s := newTestServer(t)
+
+	const content = "0123456789abcdefghijklmnopqrstuvwxyz"
+	path := putFile(t, s, "/sample.txt", content)
+	target := "/" + path + "/sample.txt"
+
+	resp, body := getFile(t, s, target, http.Header{"Range": {"bytes=10-19"}})
+	if resp.StatusCode != 206 || body != "abcdefghij" || resp.Header.Get("Content-Range") != "bytes 10-19/36" {
+		t.Errorf("range download: status = %d, body = %q, Content-Range = %q; want 206, %q, %q",
+			resp.StatusCode, body, resp.Header.Get("Content-Range"), "abcdefghij", "bytes 10-19/36")
+	}
+
+	resp, body = getFile(t, s, target, http.Header{"Accept-Encoding": {"gzip, br"}})
+	if resp.StatusCode != 200 || body != content || resp.Header.Get("Content-Encoding") != "" {
+		t.Errorf("download with Accept-Encoding: status = %d, Content-Encoding = %q, body = %q; want 200, uncompressed %q",
+			resp.StatusCode, resp.Header.Get("Content-Encoding"), body, content)
 	}
 }

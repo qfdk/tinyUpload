@@ -21,6 +21,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/valyala/fasthttp"
 )
 
 // maxUploadSize 是单次上传写盘上限。StreamRequestBody=true 时 fasthttp 不再用
@@ -41,13 +42,15 @@ type FileServer struct {
 	db        *sql.DB
 	uploadDir string
 	app       *fiber.App
+	sendFile  fasthttp.RequestHandler
 }
 
 func NewFileServer() (*FileServer, error) {
+	const uploadDir = "data/uploads"
 	if err := os.MkdirAll("data", 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %v", err)
 	}
-	if err := os.MkdirAll("data/uploads", 0755); err != nil {
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create uploads directory: %v", err)
 	}
 
@@ -122,9 +125,30 @@ func NewFileServer() (*FileServer, error) {
 
 	return &FileServer{
 		db:        db,
-		uploadDir: "data/uploads",
+		uploadDir: uploadDir,
 		app:       app,
+		sendFile:  newUploadSender(uploadDir),
 	}, nil
+}
+
+// sendPathKey 是在 RequestCtx 上传递待发送文件路径（相对上传目录，以 / 开头）的键。
+type sendPathKey struct{}
+
+// newUploadSender 返回把上传目录 root 内的文件写进响应的处理器，文件路径经 sendPathKey 传入。
+//
+// 不用 fiber 的 c.SendFile：它把磁盘路径写进请求 URI 再解析回来，文件名里的 %XX 被解码、
+// /../ 被折叠、# 之后被截断，上传者起名 "%2e%2e%2f%2e%2e%2ffiles.db" 就能读到上传目录
+// 之外的任意文件。PathRewrite 返回的路径 fasthttp 原样使用，不做解码，并限定在 root 之内。
+func newUploadSender(root string) fasthttp.RequestHandler {
+	fs := &fasthttp.FS{
+		Root:            root,
+		AcceptByteRange: true,
+		PathRewrite: func(ctx *fasthttp.RequestCtx) []byte {
+			path, _ := ctx.UserValue(sendPathKey{}).(string)
+			return []byte(path)
+		},
+	}
+	return fs.NewRequestHandler()
 }
 
 func (s *FileServer) setupRoutes() {
@@ -421,7 +445,15 @@ func (s *FileServer) handleDownload(c *fiber.Ctx) error {
 		c.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	}
 
-	return c.SendFile(filePath)
+	// 文件内容不做传输压缩：去掉 Accept-Encoding，compress 中间件就不会把文件流再压一遍
+	//（否则 Content-Length 与 Range 都会失效）。
+	c.Request().Header.Del(fiber.HeaderAcceptEncoding)
+	c.Context().SetUserValue(sendPathKey{}, "/"+path+"/"+originalFilename)
+	s.sendFile(c.Context())
+	if c.Response().StatusCode() == fiber.StatusNotFound {
+		return c.Status(404).SendString("File not found")
+	}
+	return nil
 }
 
 func (s *FileServer) handleDelete(c *fiber.Ctx) error {
