@@ -92,10 +92,13 @@ func NewFileServer() (*FileServer, error) {
 	}
 
 	app := fiber.New(fiber.Config{
-		Prefork:                 false,
-		ServerHeader:            "FileServer",
-		BodyLimit:               maxUploadSize,
-		StreamRequestBody:       true,
+		Prefork:           false,
+		ServerHeader:      "FileServer",
+		BodyLimit:         maxUploadSize,
+		StreamRequestBody: true,
+		// 上传接口只收原始字节流。fasthttp 默认会在路由之前预解析 multipart 请求体：
+		// 不受 maxUploadSize 约束地写进临时目录，并且不再提供请求体流。
+		DisablePreParseMultipartForm: true,
 		// StreamRequestBody 下 ReadTimeout 覆盖整个请求体的读取，WriteTimeout 覆盖整个
 		// 响应体的写出。nginx 已关请求缓冲（proxy_request_buffering off），8GB 在
 		// 5Mbps 链路上约需 3.6 小时，按 4h 兜底。
@@ -276,6 +279,13 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 		return c.Status(400).SendString("Invalid filename after sanitization")
 	}
 
+	// 既无 Content-Length 也非 chunked 的 PUT（如 `curl -X PUT host/x`）没有请求体流。
+	// 不在这里拦住，nil 会进 io.Copy 空指针 panic，而 handler 里的 panic 会打死整个进程。
+	body := c.Context().RequestBodyStream()
+	if body == nil {
+		return c.Status(400).SendString("Empty file content")
+	}
+
 	path := generateRandomPath()
 	dirPath := filepath.Join(s.uploadDir, path)
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
@@ -294,7 +304,7 @@ func (s *FileServer) handleUpload(c *fiber.Ctx) error {
 	// 流式写盘，避免将整个请求体读入内存（大文件并发会导致 OOM）。
 	// 同时用 LimitReader 强制 maxUploadSize 上限：StreamRequestBody 下 BodyLimit 不再生效，
 	// 否则攻击者可发送任意大小的流耗尽磁盘。多读 1 字节用于判定是否越界。
-	limited := io.LimitReader(c.Context().RequestBodyStream(), maxUploadSize+1)
+	limited := io.LimitReader(body, maxUploadSize+1)
 	fileSize, copyErr := io.Copy(out, limited)
 	if cerr := out.Close(); cerr != nil && copyErr == nil {
 		copyErr = cerr

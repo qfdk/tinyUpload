@@ -566,3 +566,45 @@ func TestDownloadRangeAndNoCompression(t *testing.T) {
 			resp.StatusCode, resp.Header.Get("Content-Encoding"), body, content)
 	}
 }
+
+// TestUploadWithoutBodyStream 是拒绝服务漏洞的回归测试：既无 Content-Length 也非 chunked
+// 的 PUT（如 `curl -X PUT host/x`）没有请求体流，曾在 io.Copy 处空指针 panic 打死整个进程。
+func TestUploadWithoutBodyStream(t *testing.T) {
+	s := newTestServer(t)
+
+	resp, err := s.app.Test(httptest.NewRequest("PUT", "/empty.txt", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("PUT without body status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestUploadMultipartBodyStoredRaw：上传接口只收原始字节流。multipart 请求体不得被
+// fasthttp 预解析（预解析发生在路由之前，不受 maxUploadSize 约束地写临时文件，且不产生
+// 请求体流），而是与其他请求体一样原样落盘。
+func TestUploadMultipartBodyStoredRaw(t *testing.T) {
+	s := newTestServer(t)
+
+	const raw = "--XB\r\nContent-Disposition: form-data; name=\"f\"; filename=\"a.txt\"\r\n\r\nhello\r\n--XB--\r\n"
+	req := httptest.NewRequest("PUT", "/form.bin", strings.NewReader(raw))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=XB")
+	resp, err := s.app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("multipart PUT status = %d, want 200", resp.StatusCode)
+	}
+	var r struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, body := getFile(t, s, "/"+r.Path+"/form.bin", nil); body != raw {
+		t.Errorf("stored multipart upload = %q, want the raw request body %q", body, raw)
+	}
+}
